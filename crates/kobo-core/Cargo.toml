@@ -18,3 +18,4 @@ http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
 dirs = "6"
 libc = "0.2"
+base64 = "0.22"

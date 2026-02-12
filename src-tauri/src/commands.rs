@@ -4,7 +4,7 @@ use tauri::State;
 use tokio::sync::Mutex;
 
 use kobo_core::client::DaemonClient;
-use kobo_core::types::DaemonStatus;
+use kobo_core::types::{DaemonStatus, Session};
 
 /// Shared daemon state managed by Tauri.
 pub struct DaemonState {
@@ -57,7 +57,6 @@ pub async fn reconnect(
 ) -> Result<String, String> {
     let mut guard = state.client.lock().await;
 
-    // Try to connect using the existing client path, or default.
     let socket_path = match guard.as_ref() {
         Some(client) => client.socket_path().to_path_buf(),
         None => kobo_core::client::default_socket_path(),
@@ -71,4 +70,91 @@ pub async fn reconnect(
         }
         Err(e) => Err(format!("Failed to reconnect: {}", e)),
     }
+}
+
+/// List all sessions.
+#[tauri::command]
+pub async fn list_sessions(
+    state: State<'_, DaemonState>,
+) -> Result<Vec<Session>, String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client.list_sessions().await.map_err(|e| e.to_string())
+}
+
+/// Create a new session.
+#[tauri::command]
+pub async fn create_session(
+    state: State<'_, DaemonState>,
+    name: String,
+    model: String,
+    rows: u16,
+    cols: u16,
+) -> Result<Session, String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .create_session(&name, &model, rows, cols)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Destroy a session.
+#[tauri::command]
+pub async fn destroy_session(
+    state: State<'_, DaemonState>,
+    session_id: String,
+) -> Result<(), String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .destroy_session(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Write input to a session's PTY.
+#[tauri::command]
+pub async fn write_input(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    data: Vec<u8>,
+) -> Result<(), String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .write_input(&session_id, &data)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Resize a session's PTY.
+#[tauri::command]
+pub async fn resize_session(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    rows: u16,
+    cols: u16,
+) -> Result<(), String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .resize_session(&session_id, rows, cols)
+        .await
+        .map_err(|e| e.to_string())
 }

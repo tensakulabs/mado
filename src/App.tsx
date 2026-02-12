@@ -1,11 +1,14 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   type DaemonStatus,
+  type Session,
   healthCheck,
   reconnect,
+  createSession,
   onDaemonConnected,
   onDaemonError,
 } from "./lib/ipc";
+import { TerminalPane } from "./components/Terminal";
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
 
@@ -14,6 +17,7 @@ function App() {
     useState<ConnectionState>("connecting");
   const [daemonInfo, setDaemonInfo] = useState<DaemonStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<Session | null>(null);
 
   const fetchHealth = useCallback(async () => {
     try {
@@ -21,28 +25,48 @@ function App() {
       setDaemonInfo(status);
       setConnectionState("connected");
       setErrorMessage(null);
+      return true;
     } catch (err) {
       setConnectionState("disconnected");
       setErrorMessage(String(err));
+      return false;
     }
   }, []);
+
+  // Create a default session when daemon connects.
+  const ensureSession = useCallback(async () => {
+    if (activeSession) return;
+    try {
+      const session = await createSession("default", "sonnet", 24, 80);
+      setActiveSession(session);
+    } catch (err) {
+      console.error("Failed to create session:", err);
+      setErrorMessage(`Failed to create session: ${err}`);
+    }
+  }, [activeSession]);
 
   const handleReconnect = useCallback(async () => {
     setConnectionState("connecting");
     setErrorMessage(null);
     try {
       await reconnect();
-      await fetchHealth();
+      const healthy = await fetchHealth();
+      if (healthy) {
+        await ensureSession();
+      }
     } catch (err) {
       setConnectionState("disconnected");
       setErrorMessage(String(err));
     }
-  }, [fetchHealth]);
+  }, [fetchHealth, ensureSession]);
 
   useEffect(() => {
     // Listen for daemon connection events from the Tauri backend.
-    const unlistenConnected = onDaemonConnected(() => {
-      fetchHealth();
+    const unlistenConnected = onDaemonConnected(async () => {
+      const healthy = await fetchHealth();
+      if (healthy) {
+        await ensureSession();
+      }
     });
 
     const unlistenError = onDaemonError((error) => {
@@ -50,26 +74,23 @@ function App() {
       setErrorMessage(error);
     });
 
-    // Poll health every 5 seconds as a heartbeat.
-    const interval = setInterval(fetchHealth, 5000);
+    // Initial health check and session creation.
+    (async () => {
+      const healthy = await fetchHealth();
+      if (healthy) {
+        await ensureSession();
+      }
+    })();
 
-    // Initial health check.
-    fetchHealth();
+    // Poll health every 30 seconds (less aggressive than before since we have a terminal).
+    const interval = setInterval(fetchHealth, 30000);
 
     return () => {
       clearInterval(interval);
       unlistenConnected.then((fn) => fn());
       unlistenError.then((fn) => fn());
     };
-  }, [fetchHealth]);
-
-  const formatUptime = (seconds: number): string => {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-    const hours = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    return `${hours}h ${mins}m`;
-  };
+  }, [fetchHealth, ensureSession]);
 
   const statusColor = {
     connecting: "text-yellow-400",
@@ -83,8 +104,39 @@ function App() {
     disconnected: "bg-red-400",
   }[connectionState];
 
+  // Show terminal when connected with an active session.
+  if (connectionState === "connected" && activeSession) {
+    return (
+      <div className="flex h-screen w-screen flex-col overflow-hidden">
+        {/* Status bar */}
+        <div className="flex items-center justify-between border-b border-gray-700/50 bg-[#0a0a1a] px-3 py-1">
+          <div className="flex items-center gap-2">
+            <div className={`h-2 w-2 rounded-full ${statusDot}`} />
+            <span className="text-xs font-medium text-gray-400">Kobo</span>
+            {daemonInfo && (
+              <span className="text-xs text-gray-600">
+                v{daemonInfo.version} | PID {daemonInfo.pid}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">
+              {activeSession.name} ({activeSession.model})
+            </span>
+          </div>
+        </div>
+
+        {/* Terminal area */}
+        <div className="flex-1">
+          <TerminalPane sessionId={activeSession.id} />
+        </div>
+      </div>
+    );
+  }
+
+  // Show status/connection UI when not connected or no session.
   return (
-    <div className="flex flex-col items-center justify-center gap-8 p-8">
+    <div className="flex h-screen w-screen flex-col items-center justify-center gap-8 p-8">
       {/* Logo / Title */}
       <div className="text-center">
         <h1 className="text-4xl font-bold tracking-tight text-white">Kobo</h1>
@@ -96,7 +148,7 @@ function App() {
       {/* Status Card */}
       <div className="w-full max-w-md rounded-xl border border-gray-700/50 bg-[#16213e] p-6 shadow-lg">
         {/* Connection Status */}
-        <div className="flex items-center gap-3 mb-4">
+        <div className="mb-4 flex items-center gap-3">
           <div className={`h-3 w-3 rounded-full ${statusDot}`} />
           <span className={`text-lg font-medium ${statusColor}`}>
             {connectionState === "connecting" && "Connecting to daemon..."}
@@ -118,7 +170,7 @@ function App() {
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Uptime</span>
-              <span>{formatUptime(daemonInfo.uptime)}</span>
+              <span>{daemonInfo.uptime}s</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Sessions</span>
@@ -144,11 +196,6 @@ function App() {
           </button>
         )}
       </div>
-
-      {/* Footer */}
-      <p className="text-xs text-gray-600">
-        Kobo v0.1.0 | Foundation Phase
-      </p>
     </div>
   );
 }

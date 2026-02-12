@@ -1,3 +1,4 @@
+mod bridge;
 mod commands;
 mod lifecycle;
 
@@ -24,6 +25,12 @@ pub fn run() {
             commands::health_check,
             commands::daemon_status,
             commands::reconnect,
+            commands::list_sessions,
+            commands::create_session,
+            commands::destroy_session,
+            commands::write_input,
+            commands::resize_session,
+            bridge::attach_session,
         ])
         .setup(|app| {
             let state = app.state::<DaemonState>();

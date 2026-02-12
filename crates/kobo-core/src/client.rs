@@ -185,6 +185,86 @@ impl DaemonClient {
         Err(ClientError::StartTimeout)
     }
 
+    /// List all sessions.
+    pub async fn list_sessions(&self) -> Result<Vec<crate::types::Session>, ClientError> {
+        let body = self.get("/sessions").await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Sessions { sessions } => Ok(sessions),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Create a new session.
+    pub async fn create_session(
+        &self,
+        name: &str,
+        model: &str,
+        rows: u16,
+        cols: u16,
+    ) -> Result<crate::types::Session, ClientError> {
+        let body_json = serde_json::json!({
+            "name": name,
+            "model": model,
+            "rows": rows,
+            "cols": cols,
+        });
+        let body = self.post("/sessions", &body_json).await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::SessionCreated { session } => Ok(session),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Destroy a session.
+    pub async fn destroy_session(&self, id: &str) -> Result<(), ClientError> {
+        let body = self.delete(&format!("/sessions/{}", id)).await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Pong => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Write input to a session's PTY.
+    pub async fn write_input(&self, session_id: &str, data: &[u8]) -> Result<(), ClientError> {
+        use base64::Engine;
+        let encoded = base64::engine::general_purpose::STANDARD.encode(data);
+        let body_json = serde_json::json!({ "data": encoded });
+        let body = self
+            .post(&format!("/sessions/{}/input", session_id), &body_json)
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Pong => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Resize a session's PTY.
+    pub async fn resize_session(
+        &self,
+        session_id: &str,
+        rows: u16,
+        cols: u16,
+    ) -> Result<(), ClientError> {
+        let body_json = serde_json::json!({ "rows": rows, "cols": cols });
+        let body = self
+            .post(&format!("/sessions/{}/resize", session_id), &body_json)
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Pong => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
     /// Send an HTTP GET request to the daemon over the Unix socket.
     async fn get(&self, path: &str) -> Result<Bytes, ClientError> {
         let stream = UnixStream::connect(&self.socket_path)
@@ -215,6 +295,75 @@ impl DaemonClient {
 
         let resp = sender.send_request(req).await.map_err(ClientError::HttpError)?;
 
+        let body = resp.into_body().collect().await.map_err(ClientError::HttpError)?;
+        Ok(body.to_bytes())
+    }
+
+    /// Send an HTTP POST request with JSON body to the daemon over the Unix socket.
+    async fn post(&self, path: &str, json_body: &serde_json::Value) -> Result<Bytes, ClientError> {
+        let body_bytes = serde_json::to_vec(json_body)?;
+
+        let stream = UnixStream::connect(&self.socket_path)
+            .await
+            .map_err(|e| ClientError::ConnectionFailed {
+                path: self.socket_path.clone(),
+                source: e,
+            })?;
+
+        let io = TokioIo::new(stream);
+
+        let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
+            .await
+            .map_err(ClientError::HttpError)?;
+
+        tokio::spawn(async move {
+            if let Err(e) = conn.await {
+                tracing::error!("Connection error: {}", e);
+            }
+        });
+
+        let req = Request::builder()
+            .method("POST")
+            .uri(path)
+            .header("Host", "localhost")
+            .header("Content-Type", "application/json")
+            .body(Full::new(Bytes::from(body_bytes)))
+            .expect("Failed to build request");
+
+        let resp = sender.send_request(req).await.map_err(ClientError::HttpError)?;
+        let body = resp.into_body().collect().await.map_err(ClientError::HttpError)?;
+        Ok(body.to_bytes())
+    }
+
+    /// Send an HTTP DELETE request to the daemon over the Unix socket.
+    async fn delete(&self, path: &str) -> Result<Bytes, ClientError> {
+        let stream = UnixStream::connect(&self.socket_path)
+            .await
+            .map_err(|e| ClientError::ConnectionFailed {
+                path: self.socket_path.clone(),
+                source: e,
+            })?;
+
+        let io = TokioIo::new(stream);
+
+        let (mut sender, conn) = hyper::client::conn::http1::handshake(io)
+            .await
+            .map_err(ClientError::HttpError)?;
+
+        tokio::spawn(async move {
+            if let Err(e) = conn.await {
+                tracing::error!("Connection error: {}", e);
+            }
+        });
+
+        let req = Request::builder()
+            .method("DELETE")
+            .uri(path)
+            .header("Host", "localhost")
+            .body(Full::new(Bytes::new()))
+            .expect("Failed to build request");
+
+        let resp = sender.send_request(req).await.map_err(ClientError::HttpError)?;
         let body = resp.into_body().collect().await.map_err(ClientError::HttpError)?;
         Ok(body.to_bytes())
     }
