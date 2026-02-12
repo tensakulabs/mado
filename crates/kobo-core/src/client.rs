@@ -36,6 +36,12 @@ pub enum ClientError {
 
     #[error("Socket not found at {0}")]
     SocketNotFound(PathBuf),
+
+    #[error("Failed to start daemon: {0}")]
+    StartFailed(String),
+
+    #[error("Daemon did not start in time (socket not found after timeout)")]
+    StartTimeout,
 }
 
 /// Client for communicating with the kobo daemon over a Unix domain socket.
@@ -95,6 +101,88 @@ impl DaemonClient {
             DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
             _ => Err(ClientError::UnexpectedResponse),
         }
+    }
+
+    /// Check if the daemon is alive by attempting a quick ping.
+    pub async fn is_alive(&self) -> bool {
+        self.ping().await.is_ok()
+    }
+
+    /// Ensure the daemon is running, starting it if necessary.
+    ///
+    /// 1. Try to connect to existing daemon.
+    /// 2. If connection fails, check PID file.
+    /// 3. If PID is dead or missing, spawn the daemon binary.
+    /// 4. Wait for socket to appear and connect.
+    pub async fn ensure_daemon_running(
+        socket_path: &Path,
+        daemon_binary: &Path,
+    ) -> Result<Self, ClientError> {
+        let client = Self::new(socket_path);
+
+        // Try to connect to existing daemon.
+        if client.is_alive().await {
+            tracing::info!("Connected to existing daemon");
+            return Ok(client);
+        }
+
+        tracing::info!("No running daemon found, starting one...");
+
+        // Clean up stale PID file if the process is dead.
+        let pid_path = socket_path.with_file_name("kobo.pid");
+        if pid_path.exists() {
+            if let Ok(contents) = std::fs::read_to_string(&pid_path) {
+                if let Ok(pid) = contents.trim().parse::<u32>() {
+                    let alive = unsafe { libc::kill(pid as i32, 0) == 0 };
+                    if !alive {
+                        tracing::warn!("Cleaning up stale PID file for dead process {}", pid);
+                        let _ = std::fs::remove_file(&pid_path);
+                        let _ = std::fs::remove_file(socket_path);
+                    } else {
+                        // Process is alive but socket is unresponsive -- something is wrong.
+                        return Err(ClientError::StartFailed(format!(
+                            "Daemon process {} is alive but socket is unresponsive",
+                            pid
+                        )));
+                    }
+                }
+            }
+        }
+
+        // Start the daemon.
+        let result = std::process::Command::new(daemon_binary)
+            .arg("--daemonize")
+            .arg("--socket-path")
+            .arg(socket_path)
+            .spawn();
+
+        match result {
+            Ok(_child) => {
+                tracing::info!("Daemon process spawned");
+            }
+            Err(e) => {
+                return Err(ClientError::StartFailed(format!(
+                    "Failed to spawn daemon binary at {}: {}",
+                    daemon_binary.display(),
+                    e
+                )));
+            }
+        }
+
+        // Wait for the socket to appear and become responsive.
+        let timeout = std::time::Duration::from_secs(5);
+        let poll_interval = std::time::Duration::from_millis(100);
+        let start = std::time::Instant::now();
+
+        while start.elapsed() < timeout {
+            if client.is_alive().await {
+                tracing::info!("Connected to newly started daemon");
+                return Ok(client);
+            }
+            tokio::time::sleep(poll_interval).await;
+        }
+
+        Err(ClientError::StartTimeout)
     }
 
     /// Send an HTTP GET request to the daemon over the Unix socket.

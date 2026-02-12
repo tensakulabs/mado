@@ -1,15 +1,18 @@
 use std::path::PathBuf;
 
-use tokio::signal;
-use tracing;
 use tracing_subscriber::EnvFilter;
 
-use kobo_core::client::default_socket_path;
+use kobo_core::client::{default_pid_path, default_socket_path, default_state_path};
+use kobo_daemon::lifecycle::{DaemonConfig, start};
 
 /// CLI arguments for the daemon.
 struct DaemonArgs {
     /// Path to the Unix domain socket.
     socket_path: PathBuf,
+    /// Path to the PID file.
+    pid_path: PathBuf,
+    /// Path to the state file.
+    state_path: PathBuf,
     /// Run in foreground (don't daemonize). Default: true.
     foreground: bool,
     /// Log level filter.
@@ -20,6 +23,8 @@ impl DaemonArgs {
     fn parse() -> Self {
         let mut args = std::env::args().skip(1);
         let mut socket_path = None;
+        let mut pid_path = None;
+        let mut state_path = None;
         let mut foreground = true;
         let mut log_level = String::from("info");
 
@@ -27,6 +32,12 @@ impl DaemonArgs {
             match arg.as_str() {
                 "--socket-path" => {
                     socket_path = args.next().map(PathBuf::from);
+                }
+                "--pid-path" => {
+                    pid_path = args.next().map(PathBuf::from);
+                }
+                "--state-path" => {
+                    state_path = args.next().map(PathBuf::from);
                 }
                 "--foreground" => {
                     foreground = true;
@@ -48,6 +59,8 @@ impl DaemonArgs {
 
         Self {
             socket_path: socket_path.unwrap_or_else(default_socket_path),
+            pid_path: pid_path.unwrap_or_else(default_pid_path),
+            state_path: state_path.unwrap_or_else(default_state_path),
             foreground,
             log_level,
         }
@@ -70,6 +83,7 @@ async fn main() {
         std::process::id()
     );
     tracing::info!("Socket path: {}", args.socket_path.display());
+    tracing::info!("PID path: {}", args.pid_path.display());
     tracing::info!(
         "Mode: {}",
         if args.foreground {
@@ -79,30 +93,15 @@ async fn main() {
         }
     );
 
-    // Create shutdown signal that listens for SIGTERM and SIGINT.
-    let shutdown = async {
-        let mut sigterm =
-            signal::unix::signal(signal::unix::SignalKind::terminate())
-                .expect("Failed to install SIGTERM handler");
-        let mut sigint =
-            signal::unix::signal(signal::unix::SignalKind::interrupt())
-                .expect("Failed to install SIGINT handler");
-
-        tokio::select! {
-            _ = sigterm.recv() => {
-                tracing::info!("Received SIGTERM, initiating graceful shutdown");
-            }
-            _ = sigint.recv() => {
-                tracing::info!("Received SIGINT, initiating graceful shutdown");
-            }
-        }
+    let config = DaemonConfig {
+        socket_path: args.socket_path,
+        pid_path: args.pid_path,
+        state_path: args.state_path,
+        daemonize: !args.foreground,
     };
 
-    // Start the server.
-    if let Err(e) = kobo_daemon::server::start_server(args.socket_path, shutdown).await {
-        tracing::error!("Server error: {}", e);
+    if let Err(e) = start(config).await {
+        tracing::error!("Daemon error: {}", e);
         std::process::exit(1);
     }
-
-    tracing::info!("Daemon shut down cleanly");
 }
