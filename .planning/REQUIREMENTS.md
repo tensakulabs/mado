@@ -173,10 +173,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PLAT-03 | Phase 2 | Pending |
 
 **Coverage:**
-- v1 requirements: 47 total
-- Mapped to phases: 47
-- Unmapped: 0 ✓
+- v1 requirements: 51 total
+- Mapped to phases: 51
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-12*
-*Last updated: 2026-02-12 after initial definition*
+*Last updated: 2026-02-12 after roadmap creation*
