@@ -5,33 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Users can run multiple AI conversations simultaneously in a spatial interface, with sessions that persist across app restarts and changes tracked via local git.
-**Current focus:** Phase 1 - Foundation
+**Current focus:** Phase 2 - Terminal
 
 ## Current Position
 
-Phase: 1 of 6 (Foundation)
-Plan: 0 of 3 in current phase
-Status: Planned -- ready to execute
-Last activity: 2026-02-12 -- Phase 1 planned with 3 plans (9 tasks total)
+Phase: 2 of 6 (Terminal)
+Plan: 0 of TBD in current phase
+Status: Phase 1 complete, Phase 2 planning needed
+Last activity: 2026-02-12 -- Phase 1 completed (3 plans, 9 tasks, 21 tests passing)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [##░░░░░░░░] 17%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 0
-- Average duration: -
-- Total execution time: 0 hours
+- Total plans completed: 3
+- Average duration: ~15 min
+- Total execution time: ~45 min
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| - | - | - | - |
+| 1. Foundation | 3/3 | ~45 min | ~15 min |
 
 **Recent Trend:**
-- Last 5 plans: -
-- Trend: -
+- Last 3 plans: 01-01 (~15m), 01-02 (~15m), 01-03 (~15m)
+- Trend: Consistent
 
 *Updated after each plan completion*
 
@@ -42,18 +42,21 @@ Progress: [░░░░░░░░░░] 0%
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap]: 6-phase structure derived from requirement categories with dependency chain: Foundation -> Terminal -> Claude -> Versioning -> Change Indicators -> Polish
-- [Roadmap]: Phase 3 (Claude Integration) flagged for deeper research during planning -- Claude CLI PTY behavior and auth flow need investigation
+- [Phase 1]: Used `start_with_shutdown()` for testable daemon lifecycle (oneshot channel instead of Unix signals)
+- [Phase 1]: kobo-daemon is both a binary (main.rs) and library (lib.rs) crate to support integration tests
+- [Phase 1]: DaemonClient uses raw hyper HTTP/1.1 over Unix socket (not reqwest) for minimal dependencies
+- [Phase 1]: State persistence uses atomic write (temp file + rename) to prevent corruption
 
 ### Pending Todos
 
 None yet.
 
-### Phase 1 Plan Summary
+### Phase 1 Completion Summary
 
-- **01-01 (Wave 1):** Cargo workspace + kobo-core types + kobo-daemon axum server on Unix socket. 3 tasks. No deps.
-- **01-02 (Wave 2):** PID file, daemonization, crash recovery, state persistence. 3 tasks. Depends on 01-01.
-- **01-03 (Wave 3):** Tauri app shell, daemon client lifecycle, React status UI. 3 tasks. Depends on 01-01 + 01-02.
+- **01-01:** Cargo workspace + kobo-core types + kobo-daemon axum server. 5 integration tests.
+- **01-02:** PID file, daemonization, crash recovery, state persistence. 16 tests total (10 unit + 6 lifecycle).
+- **01-03:** Tauri app shell, daemon client lifecycle, React status UI. Frontend builds, workspace compiles.
+- **Total:** 21 tests passing, full workspace builds, daemon starts/stops/recovers cleanly.
 
 ### Blockers/Concerns
 
@@ -63,5 +66,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Phase 1 planned, ready to execute
+Stopped at: Phase 1 complete, starting Phase 2
 Resume file: None

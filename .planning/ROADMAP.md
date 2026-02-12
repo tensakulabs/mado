@@ -12,7 +12,7 @@ Kobo delivers a chat-friendly tmux for AI conversations through six phases that 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Daemon lifecycle, IPC, and project scaffolding
+- [x] **Phase 1: Foundation** - Daemon lifecycle, IPC, and project scaffolding
 - [ ] **Phase 2: Terminal** - Multi-pane xterm.js rendering with PTY streaming
 - [ ] **Phase 3: Claude Integration** - Claude CLI as PTY process with model selection
 - [ ] **Phase 4: Versioning** - Local git repos with save, restore, and diff
@@ -33,9 +33,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans (Wave 1 -> Wave 2 -> Wave 3)
 
 Plans:
-- [ ] 01-01: Rust workspace scaffold + kobo-core types + kobo-daemon with axum over Unix socket (Wave 1)
-- [ ] 01-02: Daemon lifecycle -- PID file, daemonization, crash recovery, state persistence (Wave 2)
-- [ ] 01-03: Tauri app shell with daemon client, lifecycle management, and React status UI (Wave 3)
+- [x] 01-01: Rust workspace scaffold + kobo-core types + kobo-daemon with axum over Unix socket (Wave 1)
+- [x] 01-02: Daemon lifecycle -- PID file, daemonization, crash recovery, state persistence (Wave 2)
+- [x] 01-03: Tauri app shell with daemon client, lifecycle management, and React status UI (Wave 3)
 
 ### Phase 2: Terminal
 **Goal**: Users can create, split, resize, and interact with multiple terminal panes in a spatial layout with proper streaming and no memory leaks
@@ -122,8 +122,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Planned | - |
-| 2. Terminal | 0/3 | Not started | - |
+| 1. Foundation | 3/3 | Complete | 2026-02-12 |
+| 2. Terminal | 0/3 | Planning | - |
 | 3. Claude Integration | 0/2 | Not started | - |
 | 4. Versioning | 0/2 | Not started | - |
 | 5. Change Indicators | 0/1 | Not started | - |
