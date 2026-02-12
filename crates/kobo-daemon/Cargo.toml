@@ -1,0 +1,32 @@
+[package]
+name = "kobo-daemon"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Background daemon for Kobo - manages Claude CLI sessions"
+
+[[bin]]
+name = "kobo-daemon"
+path = "src/main.rs"
+
+[dependencies]
+kobo-core = { path = "../kobo-core" }
+axum = { version = "0.8", features = ["json"] }
+tokio = { workspace = true }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "http1"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tower = { version = "0.5", features = ["util"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+http-body-util = "0.1"
+kobo-core = { path = "../kobo-core" }
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "http1"] }
+tokio = { workspace = true }
+serde_json = { workspace = true }
