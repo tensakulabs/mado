@@ -30,12 +30,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. User closes the app window and reopens it -- the daemon is still running and the app reconnects
   3. User force-kills the daemon, relaunches the app, and it recovers cleanly (no stale socket errors, no duplicate instances)
   4. App builds and runs on both macOS (Intel + Apple Silicon) and Linux (Ubuntu)
-**Plans**: TBD
+**Plans**: 3 plans (Wave 1 -> Wave 2 -> Wave 3)
 
 Plans:
-- [ ] 01-01: TBD
-- [ ] 01-02: TBD
-- [ ] 01-03: TBD
+- [ ] 01-01: Rust workspace scaffold + kobo-core types + kobo-daemon with axum over Unix socket (Wave 1)
+- [ ] 01-02: Daemon lifecycle -- PID file, daemonization, crash recovery, state persistence (Wave 2)
+- [ ] 01-03: Tauri app shell with daemon client, lifecycle management, and React status UI (Wave 3)
 
 ### Phase 2: Terminal
 **Goal**: Users can create, split, resize, and interact with multiple terminal panes in a spatial layout with proper streaming and no memory leaks
@@ -122,7 +122,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 0/3 | Not started | - |
+| 1. Foundation | 0/3 | Planned | - |
 | 2. Terminal | 0/3 | Not started | - |
 | 3. Claude Integration | 0/2 | Not started | - |
 | 4. Versioning | 0/2 | Not started | - |

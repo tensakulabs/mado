@@ -11,8 +11,8 @@ See: .planning/PROJECT.md (updated 2026-02-12)
 
 Phase: 1 of 6 (Foundation)
 Plan: 0 of 3 in current phase
-Status: Ready to plan
-Last activity: 2026-02-12 -- Roadmap created with 6 phases covering 51 requirements
+Status: Planned -- ready to execute
+Last activity: 2026-02-12 -- Phase 1 planned with 3 plans (9 tasks total)
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -49,6 +49,12 @@ Recent decisions affecting current work:
 
 None yet.
 
+### Phase 1 Plan Summary
+
+- **01-01 (Wave 1):** Cargo workspace + kobo-core types + kobo-daemon axum server on Unix socket. 3 tasks. No deps.
+- **01-02 (Wave 2):** PID file, daemonization, crash recovery, state persistence. 3 tasks. Depends on 01-01.
+- **01-03 (Wave 3):** Tauri app shell, daemon client lifecycle, React status UI. 3 tasks. Depends on 01-01 + 01-02.
+
 ### Blockers/Concerns
 
 - [Research]: Claude CLI's specific TTY behavior, `-p` flag bugs, and interactive sub-process handling need hands-on testing before Phase 3 planning
@@ -57,5 +63,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Roadmap created, ready to plan Phase 1
+Stopped at: Phase 1 planned, ready to execute
 Resume file: None
