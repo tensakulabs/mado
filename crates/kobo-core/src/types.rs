@@ -45,6 +45,8 @@ pub struct Session {
     pub status: SessionStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
+    pub working_dir: Option<String>,
 }
 
 /// Status information about the running daemon.

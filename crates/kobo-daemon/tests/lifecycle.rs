@@ -162,6 +162,7 @@ fn test_state_persistence_save_and_load() {
         status: kobo_core::types::SessionStatus::Active,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
+        working_dir: None,
     });
 
     // Save

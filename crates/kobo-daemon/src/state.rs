@@ -138,6 +138,7 @@ mod tests {
             status: SessionStatus::Active,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            working_dir: None,
         }
     }
 
