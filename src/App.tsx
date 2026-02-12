@@ -1,14 +1,16 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   type DaemonStatus,
-  type Session,
   healthCheck,
   reconnect,
-  createSession,
   onDaemonConnected,
   onDaemonError,
 } from "./lib/ipc";
-import { TerminalPane } from "./components/Terminal";
+import { usePaneStore } from "./stores/panes";
+import { useSessionStore } from "./stores/sessions";
+import { Layout } from "./components/Layout";
+import { Toolbar } from "./components/Toolbar";
+import { useKeyboard } from "./hooks/useKeyboard";
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
 
@@ -17,7 +19,13 @@ function App() {
     useState<ConnectionState>("connecting");
   const [daemonInfo, setDaemonInfo] = useState<DaemonStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [activeSession, setActiveSession] = useState<Session | null>(null);
+
+  const root = usePaneStore((s) => s.root);
+  const initSinglePane = usePaneStore((s) => s.initSinglePane);
+  const createSession = useSessionStore((s) => s.createSession);
+
+  // Activate keyboard shortcuts.
+  useKeyboard();
 
   const fetchHealth = useCallback(async () => {
     try {
@@ -33,17 +41,17 @@ function App() {
     }
   }, []);
 
-  // Create a default session when daemon connects.
-  const ensureSession = useCallback(async () => {
-    if (activeSession) return;
+  // Create initial session and pane when daemon connects.
+  const ensureInitialPane = useCallback(async () => {
+    if (root) return; // Already initialized.
     try {
       const session = await createSession("default", "sonnet", 24, 80);
-      setActiveSession(session);
+      initSinglePane(session.id);
     } catch (err) {
-      console.error("Failed to create session:", err);
+      console.error("Failed to create initial session:", err);
       setErrorMessage(`Failed to create session: ${err}`);
     }
-  }, [activeSession]);
+  }, [root, createSession, initSinglePane]);
 
   const handleReconnect = useCallback(async () => {
     setConnectionState("connecting");
@@ -52,20 +60,20 @@ function App() {
       await reconnect();
       const healthy = await fetchHealth();
       if (healthy) {
-        await ensureSession();
+        await ensureInitialPane();
       }
     } catch (err) {
       setConnectionState("disconnected");
       setErrorMessage(String(err));
     }
-  }, [fetchHealth, ensureSession]);
+  }, [fetchHealth, ensureInitialPane]);
 
   useEffect(() => {
-    // Listen for daemon connection events from the Tauri backend.
+    // Listen for daemon connection events.
     const unlistenConnected = onDaemonConnected(async () => {
       const healthy = await fetchHealth();
       if (healthy) {
-        await ensureSession();
+        await ensureInitialPane();
       }
     });
 
@@ -78,11 +86,11 @@ function App() {
     (async () => {
       const healthy = await fetchHealth();
       if (healthy) {
-        await ensureSession();
+        await ensureInitialPane();
       }
     })();
 
-    // Poll health every 30 seconds (less aggressive than before since we have a terminal).
+    // Poll health every 30 seconds.
     const interval = setInterval(fetchHealth, 30000);
 
     return () => {
@@ -90,8 +98,21 @@ function App() {
       unlistenConnected.then((fn) => fn());
       unlistenError.then((fn) => fn());
     };
-  }, [fetchHealth, ensureSession]);
+  }, [fetchHealth, ensureInitialPane]);
 
+  // Show full multi-pane UI when connected with panes.
+  if (connectionState === "connected" && root) {
+    return (
+      <div className="flex h-screen w-screen flex-col overflow-hidden">
+        <Toolbar daemonInfo={daemonInfo} connectionState={connectionState} />
+        <div className="flex-1 min-h-0">
+          <Layout />
+        </div>
+      </div>
+    );
+  }
+
+  // Show status/connection UI when not ready.
   const statusColor = {
     connecting: "text-yellow-400",
     connected: "text-green-400",
@@ -104,40 +125,8 @@ function App() {
     disconnected: "bg-red-400",
   }[connectionState];
 
-  // Show terminal when connected with an active session.
-  if (connectionState === "connected" && activeSession) {
-    return (
-      <div className="flex h-screen w-screen flex-col overflow-hidden">
-        {/* Status bar */}
-        <div className="flex items-center justify-between border-b border-gray-700/50 bg-[#0a0a1a] px-3 py-1">
-          <div className="flex items-center gap-2">
-            <div className={`h-2 w-2 rounded-full ${statusDot}`} />
-            <span className="text-xs font-medium text-gray-400">Kobo</span>
-            {daemonInfo && (
-              <span className="text-xs text-gray-600">
-                v{daemonInfo.version} | PID {daemonInfo.pid}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">
-              {activeSession.name} ({activeSession.model})
-            </span>
-          </div>
-        </div>
-
-        {/* Terminal area */}
-        <div className="flex-1">
-          <TerminalPane sessionId={activeSession.id} />
-        </div>
-      </div>
-    );
-  }
-
-  // Show status/connection UI when not connected or no session.
   return (
     <div className="flex h-screen w-screen flex-col items-center justify-center gap-8 p-8">
-      {/* Logo / Title */}
       <div className="text-center">
         <h1 className="text-4xl font-bold tracking-tight text-white">Kobo</h1>
         <p className="mt-2 text-sm text-gray-400">
@@ -145,9 +134,7 @@ function App() {
         </p>
       </div>
 
-      {/* Status Card */}
       <div className="w-full max-w-md rounded-xl border border-gray-700/50 bg-[#16213e] p-6 shadow-lg">
-        {/* Connection Status */}
         <div className="mb-4 flex items-center gap-3">
           <div className={`h-3 w-3 rounded-full ${statusDot}`} />
           <span className={`text-lg font-medium ${statusColor}`}>
@@ -157,7 +144,6 @@ function App() {
           </span>
         </div>
 
-        {/* Daemon Info */}
         {daemonInfo && connectionState === "connected" && (
           <div className="space-y-2 text-sm text-gray-300">
             <div className="flex justify-between">
@@ -168,25 +154,15 @@ function App() {
               <span className="text-gray-500">PID</span>
               <span>{daemonInfo.pid}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Uptime</span>
-              <span>{daemonInfo.uptime}s</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Sessions</span>
-              <span>{daemonInfo.session_count}</span>
-            </div>
           </div>
         )}
 
-        {/* Error Message */}
         {errorMessage && (
           <div className="mt-3 rounded-md bg-red-900/30 p-3 text-sm text-red-300">
             {errorMessage}
           </div>
         )}
 
-        {/* Reconnect Button */}
         {connectionState === "disconnected" && (
           <button
             onClick={handleReconnect}
