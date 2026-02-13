@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use tracing_subscriber::EnvFilter;
 
 use kobo_core::client::{default_pid_path, default_socket_path, default_state_path};
-use kobo_daemon::lifecycle::{DaemonConfig, start};
+use kobo_daemon::lifecycle::{daemonize, DaemonConfig, start};
 
 /// CLI arguments for the daemon.
 struct DaemonArgs {
@@ -67,10 +67,27 @@ impl DaemonArgs {
     }
 }
 
-#[tokio::main]
-async fn main() {
+fn main() {
     let args = DaemonArgs::parse();
 
+    // CRITICAL: Daemonize BEFORE starting tokio runtime.
+    // Forking after tokio starts corrupts the thread pool.
+    if !args.foreground {
+        if let Err(e) = daemonize() {
+            eprintln!("Failed to daemonize: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // Now start tokio runtime (after fork if daemonized).
+    tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("Failed to create tokio runtime")
+        .block_on(async_main(args));
+}
+
+async fn async_main(args: DaemonArgs) {
     // Set up tracing/logging.
     let filter = EnvFilter::try_new(&args.log_level).unwrap_or_else(|_| EnvFilter::new("info"));
     tracing_subscriber::fmt()

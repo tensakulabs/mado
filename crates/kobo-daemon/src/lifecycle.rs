@@ -94,9 +94,11 @@ pub async fn start_with_shutdown(
     // Step 1: Ensure the base directory exists with 0700 permissions.
     ensure_base_dir(config.base_dir())?;
 
-    // Step 2: Daemonize if requested.
+    // Step 2: Daemonize check (daemonize() must be called BEFORE tokio starts).
+    // This is now handled in main.rs before #[tokio::main].
+    // We just log here for consistency.
     if config.daemonize {
-        daemonize()?;
+        tracing::debug!("Running in daemon mode (daemonized before tokio started)");
     }
 
     // Step 3: Acquire PID file (prevents duplicates, cleans stale).
@@ -203,7 +205,11 @@ fn ensure_base_dir(dir: &Path) -> Result<(), LifecycleError> {
 /// 2. setsid(): create new session (no controlling terminal).
 /// 3. Second fork: first child exits, grandchild continues (can never acquire terminal).
 /// 4. Redirect stdin/stdout/stderr to /dev/null.
-fn daemonize() -> Result<(), LifecycleError> {
+/// Daemonize the process (double-fork into background).
+///
+/// **IMPORTANT:** This must be called BEFORE starting the tokio runtime,
+/// as forking after thread pool creation corrupts the runtime.
+pub fn daemonize() -> Result<(), LifecycleError> {
     use std::fs::File;
 
     // First fork
