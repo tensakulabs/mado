@@ -76,8 +76,13 @@ export function createTerminal(container: HTMLElement): TerminalInstance {
     console.warn("WebGL addon not available, using DOM renderer");
   }
 
-  // Initial fit.
-  fitAddon.fit();
+  // Initial fit - delayed to ensure container has dimensions.
+  // xterm needs the container to have actual size before fit() works correctly.
+  requestAnimationFrame(() => {
+    fitAddon.fit();
+    // Second fit after a short delay to handle any layout shifts.
+    setTimeout(() => fitAddon.fit(), 100);
+  });
 
   // Set up debounced resize via ResizeObserver.
   let resizeTimeout: ReturnType<typeof setTimeout> | null = null;

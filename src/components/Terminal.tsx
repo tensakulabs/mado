@@ -22,11 +22,11 @@ export function TerminalPane({ sessionId }: TerminalProps) {
   }
 
   return (
-    <div className="relative h-full w-full">
+    <div className="relative h-full w-full overflow-hidden">
       {/* Terminal container -- always rendered so xterm can attach */}
       <div
         ref={containerRef}
-        className="h-full w-full"
+        className="absolute inset-0"
         style={{ display: isConnected || error ? "block" : "none" }}
       />
 
