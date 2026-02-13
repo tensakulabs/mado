@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { TerminalPane } from "./Terminal";
+import { ChatView } from "./ChatView";
 import { Timeline } from "./Timeline";
 import { ChangeDetails } from "./ChangeDetails";
 import { usePaneStore } from "../stores/panes";
@@ -13,7 +13,7 @@ interface PaneProps {
 }
 
 /**
- * Wraps a Terminal component with pane chrome (border, header, focus state).
+ * Wraps a ChatView component with pane chrome (border, header, focus state).
  * Includes save button, timeline toggle, and real-time change indicator.
  */
 export function Pane({ paneId, sessionId }: PaneProps) {
@@ -175,9 +175,9 @@ export function Pane({ paneId, sessionId }: PaneProps) {
 
       {/* Main content area */}
       <div className="flex flex-1 min-h-0">
-        {/* Terminal area */}
+        {/* Chat area */}
         <div className="flex-1 min-h-0">
-          <TerminalPane sessionId={sessionId} />
+          <ChatView sessionId={sessionId} />
         </div>
 
         {/* Timeline sidebar */}

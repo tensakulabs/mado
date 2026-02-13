@@ -40,6 +40,11 @@ pub fn run() {
             commands::diff_milestones,
             commands::restore_milestone,
             commands::workspace_changes,
+            // Chat mode commands.
+            commands::send_message,
+            commands::get_messages,
+            commands::cancel_response,
+            bridge::attach_chat_session,
         ])
         .setup(|app| {
             let state = app.state::<DaemonState>();

@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 use serde::Serialize;
 
 use kobo_core::client::DaemonClient;
-use kobo_core::types::{DaemonStatus, Session};
+use kobo_core::types::{DaemonStatus, Message, Session};
 
 /// Shared daemon state managed by Tauri.
 pub struct DaemonState {
@@ -299,4 +299,61 @@ pub fn list_models() -> Vec<ModelInfo> {
             description: "Fastest, great for quick tasks".to_string(),
         },
     ]
+}
+
+// ── Chat mode commands ──
+
+/// Send a message to a session (chat mode).
+#[tauri::command]
+pub async fn send_message(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    content: String,
+    model: Option<String>,
+) -> Result<String, String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .send_message(&session_id, &content, model.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get messages from a session (chat mode).
+#[tauri::command]
+pub async fn get_messages(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    limit: Option<usize>,
+    before_id: Option<String>,
+) -> Result<Vec<Message>, String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .get_messages(&session_id, limit, before_id.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Cancel an in-progress response (chat mode).
+#[tauri::command]
+pub async fn cancel_response(
+    state: State<'_, DaemonState>,
+    session_id: String,
+) -> Result<(), String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .cancel_response(&session_id)
+        .await
+        .map_err(|e| e.to_string())
 }

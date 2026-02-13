@@ -1,3 +1,4 @@
+pub mod conversation;
 pub mod git_ops;
 pub mod keystore;
 pub mod lifecycle;

@@ -19,8 +19,9 @@ use tokio_stream::StreamExt;
 use tracing;
 
 use kobo_core::protocol::DaemonResponse;
-use kobo_core::types::{DaemonStatus, PtySize, SessionId};
+use kobo_core::types::{DaemonStatus, PtySize, SessionId, StreamEvent};
 
+use crate::conversation::{ConversationManager, SharedConversationManager};
 use crate::process::new_shared_process_manager;
 use crate::session::{SessionManager, SharedSessionManager};
 use crate::state::DaemonState;
@@ -31,6 +32,7 @@ pub struct AppState {
     pub start_time: Instant,
     pub pid: u32,
     pub session_manager: SharedSessionManager,
+    pub conversation_manager: SharedConversationManager,
 }
 
 /// Request body for creating a session.
@@ -73,6 +75,23 @@ pub struct SaveMilestoneBody {
 #[derive(Debug, Deserialize)]
 pub struct RestoreMilestoneBody {
     pub oid: String,
+}
+
+/// Request body for sending a message (chat mode).
+#[derive(Debug, Deserialize)]
+pub struct SendMessageBody {
+    pub content: String,
+    #[serde(default)]
+    pub model: Option<String>,
+}
+
+/// Query params for getting messages.
+#[derive(Debug, Deserialize)]
+pub struct GetMessagesQuery {
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub before_id: Option<String>,
 }
 
 /// Start the daemon's HTTP server on a Unix domain socket.
@@ -126,10 +145,17 @@ fn create_app_state() -> AppState {
     let process_manager = new_shared_process_manager();
     let session_manager = Arc::new(SessionManager::new(daemon_state, process_manager));
 
+    // Create conversation manager with storage in ~/.kobo/conversations/.
+    let storage_dir = dirs::home_dir()
+        .map(|h| h.join(".kobo").join("conversations"))
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp/kobo/conversations"));
+    let conversation_manager = Arc::new(ConversationManager::new(storage_dir));
+
     AppState {
         start_time: Instant::now(),
         pid: std::process::id(),
         session_manager,
+        conversation_manager,
     }
 }
 
@@ -142,10 +168,14 @@ fn create_router(state: AppState) -> Router {
         // Session CRUD.
         .route("/sessions", get(list_sessions_handler).post(create_session_handler))
         .route("/sessions/{id}", get(get_session_handler).delete(destroy_session_handler))
-        // Session I/O.
+        // Session I/O (PTY mode -- legacy).
         .route("/sessions/{id}/input", post(input_handler))
         .route("/sessions/{id}/resize", post(resize_handler))
         .route("/sessions/{id}/output", get(output_handler))
+        // Chat mode (new).
+        .route("/sessions/{id}/messages", get(get_messages_handler).post(send_message_handler))
+        .route("/sessions/{id}/messages/current", axum::routing::delete(cancel_response_handler))
+        .route("/sessions/{id}/stream", get(stream_events_handler))
         // Versioning.
         .route("/sessions/{id}/save", post(save_milestone_handler))
         .route("/sessions/{id}/milestones", get(list_milestones_handler))
@@ -314,6 +344,97 @@ async fn output_handler(
             Sse::new(Box::pin(error_stream))
         }
     }
+}
+
+// ── Chat mode endpoints ──
+
+async fn send_message_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<SendMessageBody>,
+) -> Json<DaemonResponse> {
+    let session_id = SessionId::new(id.clone());
+
+    // Ensure conversation is initialized for this session.
+    let session = state.session_manager.get_session(&session_id).await;
+    if let Some(ref s) = session {
+        state
+            .conversation_manager
+            .init_session(&session_id, &s.model, s.working_dir.clone())
+            .await;
+    } else {
+        return Json(DaemonResponse::Error {
+            message: format!("Session not found: {}", id),
+        });
+    }
+
+    match state
+        .conversation_manager
+        .send_message(&session_id, body.content, body.model)
+        .await
+    {
+        Ok(message_id) => Json(DaemonResponse::MessageAccepted { message_id }),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn get_messages_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(params): axum::extract::Query<GetMessagesQuery>,
+) -> Json<DaemonResponse> {
+    let session_id = SessionId::new(id);
+
+    match state
+        .conversation_manager
+        .get_messages(&session_id, params.limit, params.before_id)
+        .await
+    {
+        Ok(messages) => Json(DaemonResponse::Messages { messages }),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn cancel_response_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Json<DaemonResponse> {
+    let session_id = SessionId::new(id);
+
+    match state.conversation_manager.cancel_response(&session_id).await {
+        Ok(()) => Json(DaemonResponse::CancelAccepted),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn stream_events_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Sse<std::pin::Pin<Box<dyn Stream<Item = Result<Event, Infallible>> + Send>>> {
+    let session_id = SessionId::new(id);
+
+    let rx = state.conversation_manager.subscribe(&session_id).await;
+
+    let stream = BroadcastStream::new(rx).filter_map(|result| match result {
+        Ok(event) => {
+            let json = serde_json::to_string(&event).unwrap_or_default();
+            Some(Ok(Event::default().data(json).event("message")))
+        }
+        Err(_) => None, // Lagged receiver, skip
+    });
+
+    // Prepend a "connected" event.
+    let started = futures::stream::once(async {
+        Ok(Event::default().data("connected").event("connected"))
+    });
+
+    Sse::new(Box::pin(started.chain(stream)))
 }
 
 // ── Versioning endpoints ──

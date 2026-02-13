@@ -53,6 +53,21 @@ pub struct Session {
     /// Whether the session is running in shell fallback mode (claude not found).
     #[serde(default)]
     pub shell_fallback: bool,
+    /// Current conversation state (chat mode).
+    #[serde(default)]
+    pub conversation_state: ConversationState,
+    /// Claude CLI session ID for --resume (not Kobo's session ID).
+    #[serde(default)]
+    pub claude_session_id: Option<String>,
+    /// Number of messages in the conversation.
+    #[serde(default)]
+    pub message_count: usize,
+    /// Cumulative token usage.
+    #[serde(default)]
+    pub total_usage: Option<TokenUsage>,
+    /// Cumulative cost in USD.
+    #[serde(default)]
+    pub total_cost_usd: Option<f64>,
 }
 
 /// Status information about the running daemon.
@@ -106,4 +121,105 @@ impl Default for PtySize {
             cols: 80,
         }
     }
+}
+
+// ============================================================================
+// Chat UI Types (v2 architecture)
+// ============================================================================
+
+/// Role of a message in a conversation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MessageRole {
+    User,
+    Assistant,
+    System,
+}
+
+/// Status of a tool invocation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ToolCallStatus {
+    Running,
+    Completed,
+    Failed,
+}
+
+/// A tool invocation within an assistant message.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ToolCall {
+    pub id: String,
+    pub name: String,
+    pub input: serde_json::Value,
+    pub output: Option<String>,
+    pub status: ToolCallStatus,
+}
+
+/// Token usage statistics.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TokenUsage {
+    pub input_tokens: u64,
+    pub output_tokens: u64,
+    #[serde(default)]
+    pub cache_read_tokens: Option<u64>,
+    #[serde(default)]
+    pub cache_write_tokens: Option<u64>,
+}
+
+/// A single message in a conversation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Message {
+    pub id: String,
+    pub role: MessageRole,
+    pub content: String,
+    #[serde(default)]
+    pub tool_calls: Vec<ToolCall>,
+    pub timestamp: DateTime<Utc>,
+    /// Token usage for this message (assistant messages only).
+    #[serde(default)]
+    pub usage: Option<TokenUsage>,
+    /// Cost in USD for this message (assistant messages only).
+    #[serde(default)]
+    pub cost_usd: Option<f64>,
+}
+
+/// Current state of a conversation.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum ConversationState {
+    /// No messages yet.
+    #[default]
+    Empty,
+    /// Waiting for user input.
+    Idle,
+    /// Claude is generating a response.
+    Streaming,
+    /// An error occurred in the last interaction.
+    Error,
+}
+
+/// Streaming events sent from daemon to UI during a response.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum StreamEvent {
+    /// Incremental text from the assistant.
+    TextDelta { text: String },
+    /// A tool is being invoked.
+    ToolUseStart {
+        tool_call_id: String,
+        name: String,
+        input: serde_json::Value,
+    },
+    /// A tool has completed.
+    ToolResult {
+        tool_call_id: String,
+        output: String,
+        is_error: bool,
+    },
+    /// The assistant message is complete.
+    MessageComplete { message: Box<Message> },
+    /// An error occurred during processing.
+    Error { message: String },
+    /// The conversation is idle (process exited cleanly).
+    Idle,
 }

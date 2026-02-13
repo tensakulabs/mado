@@ -355,6 +355,71 @@ impl DaemonClient {
         }
     }
 
+    // ── Chat mode methods ──
+
+    /// Send a message to a session (chat mode).
+    pub async fn send_message(
+        &self,
+        session_id: &str,
+        content: &str,
+        model: Option<&str>,
+    ) -> Result<String, ClientError> {
+        let mut body_json = serde_json::json!({ "content": content });
+        if let Some(m) = model {
+            body_json["model"] = serde_json::json!(m);
+        }
+        let body = self
+            .post(&format!("/sessions/{}/messages", session_id), &body_json)
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::MessageAccepted { message_id } => Ok(message_id),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Get messages from a session (chat mode).
+    pub async fn get_messages(
+        &self,
+        session_id: &str,
+        limit: Option<usize>,
+        before_id: Option<&str>,
+    ) -> Result<Vec<crate::types::Message>, ClientError> {
+        let mut path = format!("/sessions/{}/messages", session_id);
+        let mut params = Vec::new();
+        if let Some(l) = limit {
+            params.push(format!("limit={}", l));
+        }
+        if let Some(bid) = before_id {
+            params.push(format!("before_id={}", bid));
+        }
+        if !params.is_empty() {
+            path.push('?');
+            path.push_str(&params.join("&"));
+        }
+        let body = self.get(&path).await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Messages { messages } => Ok(messages),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Cancel an in-progress response (chat mode).
+    pub async fn cancel_response(&self, session_id: &str) -> Result<(), ClientError> {
+        let body = self
+            .delete(&format!("/sessions/{}/messages/current", session_id))
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::CancelAccepted => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
     /// Send an HTTP GET request to the daemon over the Unix socket.
     async fn get(&self, path: &str) -> Result<Bytes, ClientError> {
         let stream = UnixStream::connect(&self.socket_path)

@@ -59,6 +59,12 @@ impl SessionManager {
             working_dir: None,
             command: Some(spawn_result.command),
             shell_fallback: spawn_result.shell_fallback,
+            // Chat mode fields (initialized to defaults).
+            conversation_state: kobo_core::types::ConversationState::Empty,
+            claude_session_id: None,
+            message_count: 0,
+            total_usage: None,
+            total_cost_usd: None,
         };
 
         // Persist the session.

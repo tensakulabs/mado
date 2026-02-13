@@ -49,6 +49,45 @@ export interface DiffSummary {
   total_deletions: number;
 }
 
+// ── Chat mode types ──
+
+export type MessageRole = "user" | "assistant" | "system";
+
+export type ToolCallStatus = "running" | "completed" | "failed";
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  input: unknown;
+  output?: string;
+  status: ToolCallStatus;
+}
+
+export interface TokenUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens?: number;
+  cache_write_tokens?: number;
+}
+
+export interface Message {
+  id: string;
+  role: MessageRole;
+  content: string;
+  tool_calls: ToolCall[];
+  timestamp: string;
+  usage?: TokenUsage;
+  cost_usd?: number;
+}
+
+export type StreamEvent =
+  | { type: "text_delta"; text: string }
+  | { type: "tool_use_start"; tool_call_id: string; name: string; input: unknown }
+  | { type: "tool_result"; tool_call_id: string; output: string; is_error: boolean }
+  | { type: "message_complete"; message: Message }
+  | { type: "error"; message: string }
+  | { type: "idle" };
+
 // ── Daemon commands ──
 
 export async function healthCheck(): Promise<DaemonStatus> {
@@ -177,6 +216,48 @@ export function attachSession(
   const promise = invoke<void>("attach_session", {
     sessionId,
     onOutput: channel,
+  });
+
+  return { promise, channel };
+}
+
+// ── Chat mode commands ──
+
+export async function sendMessage(
+  sessionId: string,
+  content: string,
+  model?: string,
+): Promise<string> {
+  return invoke<string>("send_message", { sessionId, content, model });
+}
+
+export async function getMessages(
+  sessionId: string,
+  limit?: number,
+  beforeId?: string,
+): Promise<Message[]> {
+  return invoke<Message[]>("get_messages", { sessionId, limit, beforeId });
+}
+
+export async function cancelResponse(sessionId: string): Promise<void> {
+  return invoke<void>("cancel_response", { sessionId });
+}
+
+/**
+ * Attach to a session's chat event stream via Tauri Channel.
+ * The callback receives StreamEvent objects.
+ * Returns a cleanup function to detach.
+ */
+export function attachChatSession(
+  sessionId: string,
+  onEvent: (event: StreamEvent) => void,
+): { promise: Promise<void>; channel: Channel<StreamEvent> } {
+  const channel = new Channel<StreamEvent>();
+  channel.onmessage = onEvent;
+
+  const promise = invoke<void>("attach_chat_session", {
+    sessionId,
+    onEvent: channel,
   });
 
   return { promise, channel };

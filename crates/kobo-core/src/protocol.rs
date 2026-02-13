@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{DaemonStatus, DiffSummary, Milestone, Session, SessionId};
+use crate::types::{DaemonStatus, DiffSummary, Message, Milestone, Session, SessionId};
 
 /// Requests that can be sent to the daemon.
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,6 +16,24 @@ pub enum DaemonRequest {
     DestroySession { id: SessionId },
     /// Simple liveness ping.
     Ping,
+
+    // Chat mode requests
+    /// Send a user message and start streaming the response.
+    SendMessage {
+        id: SessionId,
+        content: String,
+        /// Override model for this message.
+        model: Option<String>,
+    },
+    /// Cancel an in-progress response.
+    CancelResponse { id: SessionId },
+    /// Get full conversation history for a session.
+    GetMessages {
+        id: SessionId,
+        limit: Option<usize>,
+        /// Pagination cursor.
+        before_id: Option<String>,
+    },
 }
 
 /// Responses from the daemon.
@@ -40,4 +58,12 @@ pub enum DaemonResponse {
     DiffResult { diff: DiffSummary },
     /// Current workspace changes (uncommitted).
     WorkspaceChanges { changes: DiffSummary },
+
+    // Chat mode responses
+    /// Full conversation history.
+    Messages { messages: Vec<Message> },
+    /// Acknowledgment that a message was received and streaming started.
+    MessageAccepted { message_id: String },
+    /// Acknowledgment that cancellation was requested.
+    CancelAccepted,
 }
