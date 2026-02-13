@@ -13,11 +13,11 @@ Kobo delivers a chat-friendly tmux for AI conversations through six phases that 
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Daemon lifecycle, IPC, and project scaffolding
-- [ ] **Phase 2: Terminal** - Multi-pane xterm.js rendering with PTY streaming
-- [ ] **Phase 3: Claude Integration** - Claude CLI as PTY process with model selection
-- [ ] **Phase 4: Versioning** - Local git repos with save, restore, and diff
-- [ ] **Phase 5: Change Indicators** - Real-time per-pane file change tracking
-- [ ] **Phase 6: Polish** - Command palette, keyboard shortcuts, and UX refinements
+- [x] **Phase 2: Terminal** - Multi-pane xterm.js rendering with PTY streaming
+- [x] **Phase 3: Claude Integration** - Claude CLI as PTY process with model selection
+- [x] **Phase 4: Versioning** - Local git repos with save, restore, and diff
+- [x] **Phase 5: Change Indicators** - Real-time per-pane file change tracking
+- [x] **Phase 6: Polish** - Command palette, keyboard shortcuts, and UX refinements
 
 ## Phase Details
 
@@ -47,12 +47,12 @@ Plans:
   3. User can scroll through terminal history, copy text with Cmd+C, and paste with Cmd+V
   4. User can close a conversation and immediately undo it within a short window
   5. Terminal output streams smoothly without memory leaks when the app runs for extended periods, and panes render correctly when the window is resized or minimized and restored
-**Plans**: TBD
+**Plans**: 3 plans (Wave 1 -> Wave 2 -> Wave 3)
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [x] 02-01: PTY process management + session CRUD endpoints + SSE streaming (Wave 1)
+- [x] 02-02: xterm.js terminal pane + PTY streaming via Tauri IPC (Wave 2)
+- [x] 02-03: Multi-pane layout manager with Zustand + keyboard shortcuts (Wave 3)
 
 ### Phase 3: Claude Integration
 **Goal**: Users can have real Claude CLI conversations inside panes with full terminal fidelity -- colors, interactive sub-processes, and model selection
@@ -63,11 +63,11 @@ Plans:
   2. User can select between opus, sonnet, and haiku models before or during a conversation
   3. Interactive sub-processes launched by Claude (vim, git rebase) work correctly inside the pane
   4. API key is stored securely (Keychain on macOS, libsecret on Linux) and connection errors are displayed clearly to the user
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1 -> Wave 2)
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [x] 03-01: Claude CLI as PTY process + model selection + fallback (Wave 1)
+- [x] 03-02: Secure API key storage via OS keychain + setup UI (Wave 2)
 
 ### Phase 4: Versioning
 **Goal**: Users can save milestones of their conversation workspace, view a timeline of saves, and restore or diff between them
@@ -78,11 +78,11 @@ Plans:
   2. User can save a milestone (with a description) and see it appear in a timeline of saved milestones
   3. User can select any two milestones and view a diff of what changed between them
   4. User can restore to any previous milestone and the conversation workspace reflects that state
-**Plans**: TBD
+**Plans**: 2 plans (Wave 1 -> Wave 2)
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [x] 04-01: git2 integration + daemon endpoints + client methods for milestones (Wave 1)
+- [x] 04-02: Timeline UI + save button + Tauri commands + IPC wrappers (Wave 2)
 
 ### Phase 5: Change Indicators
 **Goal**: Users can see at a glance what files changed in each conversation's workspace and drill into the details
@@ -93,10 +93,10 @@ Plans:
   2. The indicator updates in real-time as files change (without manual refresh)
   3. User can click the indicator to see a per-file breakdown of changes
   4. After saving a milestone, the indicator resets to show 0 changes
-**Plans**: TBD
+**Plans**: 1 plan
 
 Plans:
-- [ ] 05-01: TBD
+- [x] 05-01: workspace_changes endpoint + polling hook + clickable indicator with file breakdown (Wave 1)
 
 ### Phase 6: Polish
 **Goal**: All features are discoverable via command palette and keyboard shortcuts, the UX uses friendly vocabulary, and destructive actions are safe
@@ -108,12 +108,12 @@ Plans:
   3. Status bar shows the current model and connection status at all times
   4. New users see contextual hints that are dismissible and can be recalled later; the UI consistently uses "Conversations" and "Spaces" vocabulary
   5. Destructive actions show a preview before executing and offer an undo option within an 8-second window; Home button returns to single-pane view as an escape hatch
-**Plans**: TBD
+**Plans**: 3 plans (Wave 1 -> Wave 2 -> Wave 3)
 
 Plans:
-- [ ] 06-01: TBD
-- [ ] 06-02: TBD
-- [ ] 06-03: TBD
+- [x] 06-01: Command palette with fuzzy search (Cmd+K) (Wave 1)
+- [x] 06-02: Status bar with model + connection status (Wave 2)
+- [x] 06-03: Contextual hints + Home button + vocabulary updates (Wave 3)
 
 ## Progress
 
@@ -123,8 +123,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete | 2026-02-12 |
-| 2. Terminal | 0/3 | Planning | - |
-| 3. Claude Integration | 0/2 | Not started | - |
-| 4. Versioning | 0/2 | Not started | - |
-| 5. Change Indicators | 0/1 | Not started | - |
-| 6. Polish | 0/3 | Not started | - |
+| 2. Terminal | 3/3 | Complete | 2026-02-12 |
+| 3. Claude Integration | 2/2 | Complete | 2026-02-12 |
+| 4. Versioning | 2/2 | Complete | 2026-02-12 |
+| 5. Change Indicators | 1/1 | Complete | 2026-02-12 |
+| 6. Polish | 3/3 | Complete | 2026-02-12 |
