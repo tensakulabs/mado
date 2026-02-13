@@ -276,6 +276,75 @@ pub fn restore_milestone(path: &Path, oid: &str) -> Result<(), GitError> {
     Ok(())
 }
 
+/// Get current workspace changes (uncommitted modifications since HEAD).
+/// Returns a DiffSummary of working directory vs HEAD.
+pub fn workspace_changes(path: &Path) -> Result<DiffSummary, GitError> {
+    let repo = Repository::open(path)?;
+
+    // Get HEAD tree.
+    let head_commit = repo.head()?.peel_to_commit()?;
+    let head_tree = head_commit.tree()?;
+
+    // diff_tree_to_workdir_with_index gives us HEAD -> workdir including staged.
+    let mut diff_opts = DiffOptions::new();
+    diff_opts.include_untracked(true);
+    diff_opts.recurse_untracked_dirs(true);
+
+    let diff = repo.diff_tree_to_workdir_with_index(
+        Some(&head_tree),
+        Some(&mut diff_opts),
+    )?;
+
+    let stats = diff.stats()?;
+    let total_insertions = stats.insertions();
+    let total_deletions = stats.deletions();
+
+    let mut files = Vec::new();
+    let num_deltas = diff.deltas().len();
+    for i in 0..num_deltas {
+        let delta = diff.get_delta(i).unwrap();
+        let file_path = delta
+            .new_file()
+            .path()
+            .or_else(|| delta.old_file().path())
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|| "(unknown)".to_string());
+
+        let status = match delta.status() {
+            git2::Delta::Added => "added",
+            git2::Delta::Deleted => "deleted",
+            git2::Delta::Modified => "modified",
+            git2::Delta::Renamed => "renamed",
+            git2::Delta::Untracked => "added",
+            _ => "modified",
+        };
+
+        files.push(FileDiff {
+            path: file_path,
+            insertions: 0,
+            deletions: 0,
+            status: status.to_string(),
+        });
+    }
+
+    // Get per-file line stats.
+    for (i, file) in files.iter_mut().enumerate() {
+        if let Ok(patch) = git2::Patch::from_diff(&diff, i) {
+            if let Some(patch) = patch {
+                let (_, additions, deletions) = patch.line_stats().unwrap_or((0, 0, 0));
+                file.insertions = additions;
+                file.deletions = deletions;
+            }
+        }
+    }
+
+    Ok(DiffSummary {
+        files,
+        total_insertions,
+        total_deletions,
+    })
+}
+
 /// Create a git signature for commits.
 fn make_signature<'a>() -> Result<Signature<'a>, git2::Error> {
     Signature::now("Kobo", "kobo@local")

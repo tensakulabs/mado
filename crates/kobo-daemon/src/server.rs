@@ -151,6 +151,8 @@ fn create_router(state: AppState) -> Router {
         .route("/sessions/{id}/milestones", get(list_milestones_handler))
         .route("/sessions/{id}/diff", get(diff_milestones_handler))
         .route("/sessions/{id}/restore", post(restore_milestone_handler))
+        // Change indicators.
+        .route("/sessions/{id}/changes", get(workspace_changes_handler))
         .with_state(state)
 }
 
@@ -514,6 +516,63 @@ async fn restore_milestone_handler(
 
     match crate::git_ops::restore_milestone(path, &body.oid) {
         Ok(()) => Json(DaemonResponse::Pong),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+// ── Change indicator endpoint ──
+
+async fn workspace_changes_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    // Ensure git repo exists before querying changes.
+    if let Err(e) = crate::git_ops::init_repo(path) {
+        return Json(DaemonResponse::Error {
+            message: format!("Failed to init git repo: {}", e),
+        });
+    }
+
+    match crate::git_ops::workspace_changes(path) {
+        Ok(diff) => {
+            let core_diff = kobo_core::types::DiffSummary {
+                files: diff
+                    .files
+                    .into_iter()
+                    .map(|f| kobo_core::types::FileDiff {
+                        path: f.path,
+                        insertions: f.insertions,
+                        deletions: f.deletions,
+                        status: f.status,
+                    })
+                    .collect(),
+                total_insertions: diff.total_insertions,
+                total_deletions: diff.total_deletions,
+            };
+            Json(DaemonResponse::WorkspaceChanges { changes: core_diff })
+        }
         Err(e) => Json(DaemonResponse::Error {
             message: e.to_string(),
         }),

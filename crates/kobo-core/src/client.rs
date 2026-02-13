@@ -321,6 +321,22 @@ impl DaemonClient {
         }
     }
 
+    /// Get current workspace changes (uncommitted modifications).
+    pub async fn workspace_changes(
+        &self,
+        session_id: &str,
+    ) -> Result<crate::types::DiffSummary, ClientError> {
+        let body = self
+            .get(&format!("/sessions/{}/changes", session_id))
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::WorkspaceChanges { changes } => Ok(changes),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
     /// Restore to a milestone.
     pub async fn restore_milestone(
         &self,

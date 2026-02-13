@@ -1,9 +1,11 @@
 import { useCallback, useState } from "react";
 import { TerminalPane } from "./Terminal";
 import { Timeline } from "./Timeline";
+import { ChangeDetails } from "./ChangeDetails";
 import { usePaneStore } from "../stores/panes";
 import { useSessionStore } from "../stores/sessions";
 import { useVersioning } from "../hooks/useVersioning";
+import { useChangeIndicator } from "../hooks/useChangeIndicator";
 
 interface PaneProps {
   paneId: string;
@@ -12,7 +14,7 @@ interface PaneProps {
 
 /**
  * Wraps a Terminal component with pane chrome (border, header, focus state).
- * Includes save button and timeline toggle for versioning.
+ * Includes save button, timeline toggle, and real-time change indicator.
  */
 export function Pane({ paneId, sessionId }: PaneProps) {
   const activePaneId = usePaneStore((s) => s.activePaneId);
@@ -21,11 +23,19 @@ export function Pane({ paneId, sessionId }: PaneProps) {
   const getSession = useSessionStore((s) => s.getSession);
 
   const [showTimeline, setShowTimeline] = useState(false);
+  const [showChangeDetails, setShowChangeDetails] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const { save, isSaving, error: versionError, clearError } = useVersioning();
+  const {
+    insertions,
+    deletions,
+    files,
+    refresh: refreshChanges,
+  } = useChangeIndicator(sessionId);
 
   const isActive = activePaneId === paneId;
   const session = getSession(sessionId);
+  const hasChanges = insertions > 0 || deletions > 0;
 
   const handleFocus = useCallback(() => {
     focusPane(paneId);
@@ -44,13 +54,23 @@ export function Pane({ paneId, sessionId }: PaneProps) {
     const milestone = await save(sessionId, message);
     if (milestone) {
       setSaveMessage("Saved!");
+      // Refresh change indicator immediately after save (CHNG-04).
+      refreshChanges();
       setTimeout(() => setSaveMessage(null), 2000);
     }
-  }, [sessionId, save]);
+  }, [sessionId, save, refreshChanges]);
 
   const toggleTimeline = useCallback(() => {
     setShowTimeline((prev) => !prev);
   }, []);
+
+  const toggleChangeDetails = useCallback(
+    (e: React.MouseEvent) => {
+      e.stopPropagation();
+      setShowChangeDetails((prev) => !prev);
+    },
+    [],
+  );
 
   return (
     <div
@@ -76,10 +96,32 @@ export function Pane({ paneId, sessionId }: PaneProps) {
           <span className="text-gray-600">
             {session?.model ?? ""}
           </span>
-          {/* Change indicator placeholder */}
-          <span className="text-gray-600 font-mono text-[10px]">
-            [+0 -0]
-          </span>
+          {/* Change indicator - clickable for file breakdown (CHNG-01, CHNG-03) */}
+          <div className="relative">
+            <button
+              onClick={toggleChangeDetails}
+              className={`font-mono text-[10px] rounded px-0.5 transition-colors ${
+                hasChanges
+                  ? "text-yellow-400 hover:bg-yellow-900/30"
+                  : "text-gray-600 hover:bg-gray-800/50"
+              }`}
+              title={
+                hasChanges
+                  ? `${files.length} file${files.length !== 1 ? "s" : ""} changed - click for details`
+                  : "No uncommitted changes"
+              }
+            >
+              [+{insertions} -{deletions}]
+            </button>
+            {showChangeDetails && (
+              <ChangeDetails
+                files={files}
+                totalInsertions={insertions}
+                totalDeletions={deletions}
+                onClose={() => setShowChangeDetails(false)}
+              />
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-1">
           {/* Save feedback */}

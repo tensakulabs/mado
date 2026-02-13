@@ -152,6 +152,14 @@ export async function restoreMilestone(
   return invoke<void>("restore_milestone", { sessionId, oid });
 }
 
+// ── Change indicator commands ──
+
+export async function workspaceChanges(
+  sessionId: string,
+): Promise<DiffSummary> {
+  return invoke<DiffSummary>("workspace_changes", { sessionId });
+}
+
 // ── SSE bridge ──
 
 /**

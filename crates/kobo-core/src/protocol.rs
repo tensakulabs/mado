@@ -38,4 +38,6 @@ pub enum DaemonResponse {
     Milestones { milestones: Vec<Milestone> },
     /// Diff result between two commits.
     DiffResult { diff: DiffSummary },
+    /// Current workspace changes (uncommitted).
+    WorkspaceChanges { changes: DiffSummary },
 }

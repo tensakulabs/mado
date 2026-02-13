@@ -39,6 +39,7 @@ pub fn run() {
             commands::list_milestones,
             commands::diff_milestones,
             commands::restore_milestone,
+            commands::workspace_changes,
         ])
         .setup(|app| {
             let state = app.state::<DaemonState>();

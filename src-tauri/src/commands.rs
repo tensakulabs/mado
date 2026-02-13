@@ -262,6 +262,23 @@ pub async fn restore_milestone(
         .map_err(|e| e.to_string())
 }
 
+/// Get current workspace changes for a session.
+#[tauri::command]
+pub async fn workspace_changes(
+    state: State<'_, DaemonState>,
+    session_id: String,
+) -> Result<kobo_core::types::DiffSummary, String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .workspace_changes(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// List available AI models.
 #[tauri::command]
 pub fn list_models() -> Vec<ModelInfo> {
