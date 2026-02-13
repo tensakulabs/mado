@@ -64,6 +64,34 @@ pub struct DaemonStatus {
     pub version: String,
 }
 
+/// A saved milestone (git commit) in a session's workspace.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Milestone {
+    pub oid: String,
+    pub message: String,
+    pub timestamp: DateTime<Utc>,
+    pub files_changed: usize,
+    pub insertions: usize,
+    pub deletions: usize,
+}
+
+/// Summary of a diff between two commits.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiffSummary {
+    pub files: Vec<FileDiff>,
+    pub total_insertions: usize,
+    pub total_deletions: usize,
+}
+
+/// Diff information for a single file.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileDiff {
+    pub path: String,
+    pub insertions: usize,
+    pub deletions: usize,
+    pub status: String,
+}
+
 /// Terminal/PTY size in rows and columns.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PtySize {

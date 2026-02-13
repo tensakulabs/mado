@@ -35,6 +35,10 @@ pub fn run() {
             commands::has_api_key,
             commands::set_api_key,
             commands::delete_api_key,
+            commands::save_milestone,
+            commands::list_milestones,
+            commands::diff_milestones,
+            commands::restore_milestone,
         ])
         .setup(|app| {
             let state = app.state::<DaemonState>();

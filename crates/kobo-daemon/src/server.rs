@@ -63,6 +63,18 @@ pub struct ResizeBody {
     pub cols: u16,
 }
 
+/// Request body for saving a milestone.
+#[derive(Debug, Deserialize)]
+pub struct SaveMilestoneBody {
+    pub message: String,
+}
+
+/// Request body for restoring a milestone.
+#[derive(Debug, Deserialize)]
+pub struct RestoreMilestoneBody {
+    pub oid: String,
+}
+
 /// Start the daemon's HTTP server on a Unix domain socket.
 pub async fn start_server(
     socket_path: PathBuf,
@@ -134,6 +146,11 @@ fn create_router(state: AppState) -> Router {
         .route("/sessions/{id}/input", post(input_handler))
         .route("/sessions/{id}/resize", post(resize_handler))
         .route("/sessions/{id}/output", get(output_handler))
+        // Versioning.
+        .route("/sessions/{id}/save", post(save_milestone_handler))
+        .route("/sessions/{id}/milestones", get(list_milestones_handler))
+        .route("/sessions/{id}/diff", get(diff_milestones_handler))
+        .route("/sessions/{id}/restore", post(restore_milestone_handler))
         .with_state(state)
 }
 
@@ -294,6 +311,212 @@ async fn output_handler(
             });
             Sse::new(Box::pin(error_stream))
         }
+    }
+}
+
+// ── Versioning endpoints ──
+
+async fn save_milestone_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<SaveMilestoneBody>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    // Get session's working directory.
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    // Ensure git repo exists.
+    if let Err(e) = crate::git_ops::init_repo(path) {
+        return Json(DaemonResponse::Error {
+            message: format!("Failed to init git repo: {}", e),
+        });
+    }
+
+    match crate::git_ops::save_milestone(path, &body.message) {
+        Ok(milestone) => {
+            let core_milestone = kobo_core::types::Milestone {
+                oid: milestone.oid,
+                message: milestone.message,
+                timestamp: milestone.timestamp,
+                files_changed: milestone.files_changed,
+                insertions: milestone.insertions,
+                deletions: milestone.deletions,
+            };
+            Json(DaemonResponse::MilestoneSaved {
+                milestone: core_milestone,
+            })
+        }
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn list_milestones_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+    let limit = params
+        .get("limit")
+        .and_then(|l| l.parse().ok())
+        .unwrap_or(20usize);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    match crate::git_ops::list_milestones(path, limit) {
+        Ok(milestones) => {
+            let core_milestones: Vec<kobo_core::types::Milestone> = milestones
+                .into_iter()
+                .map(|m| kobo_core::types::Milestone {
+                    oid: m.oid,
+                    message: m.message,
+                    timestamp: m.timestamp,
+                    files_changed: m.files_changed,
+                    insertions: m.insertions,
+                    deletions: m.deletions,
+                })
+                .collect();
+            Json(DaemonResponse::Milestones {
+                milestones: core_milestones,
+            })
+        }
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn diff_milestones_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let from_oid = match params.get("from") {
+        Some(f) => f.clone(),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: "Missing 'from' parameter".to_string(),
+            });
+        }
+    };
+    let to_oid = match params.get("to") {
+        Some(t) => t.clone(),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: "Missing 'to' parameter".to_string(),
+            });
+        }
+    };
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    match crate::git_ops::diff_milestones(path, &from_oid, &to_oid) {
+        Ok(diff) => {
+            let core_diff = kobo_core::types::DiffSummary {
+                files: diff
+                    .files
+                    .into_iter()
+                    .map(|f| kobo_core::types::FileDiff {
+                        path: f.path,
+                        insertions: f.insertions,
+                        deletions: f.deletions,
+                        status: f.status,
+                    })
+                    .collect(),
+                total_insertions: diff.total_insertions,
+                total_deletions: diff.total_deletions,
+            };
+            Json(DaemonResponse::DiffResult { diff: core_diff })
+        }
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn restore_milestone_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<RestoreMilestoneBody>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    match crate::git_ops::restore_milestone(path, &body.oid) {
+        Ok(()) => Json(DaemonResponse::Pong),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
     }
 }
 

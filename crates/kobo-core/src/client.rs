@@ -265,6 +265,80 @@ impl DaemonClient {
         }
     }
 
+    /// Save a milestone for a session.
+    pub async fn save_milestone(
+        &self,
+        session_id: &str,
+        message: &str,
+    ) -> Result<crate::types::Milestone, ClientError> {
+        let body_json = serde_json::json!({ "message": message });
+        let body = self
+            .post(&format!("/sessions/{}/save", session_id), &body_json)
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::MilestoneSaved { milestone } => Ok(milestone),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// List milestones for a session.
+    pub async fn list_milestones(
+        &self,
+        session_id: &str,
+        limit: usize,
+    ) -> Result<Vec<crate::types::Milestone>, ClientError> {
+        let body = self
+            .get(&format!("/sessions/{}/milestones?limit={}", session_id, limit))
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Milestones { milestones } => Ok(milestones),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Get diff between two milestones.
+    pub async fn diff_milestones(
+        &self,
+        session_id: &str,
+        from_oid: &str,
+        to_oid: &str,
+    ) -> Result<crate::types::DiffSummary, ClientError> {
+        let body = self
+            .get(&format!(
+                "/sessions/{}/diff?from={}&to={}",
+                session_id, from_oid, to_oid
+            ))
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::DiffResult { diff } => Ok(diff),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Restore to a milestone.
+    pub async fn restore_milestone(
+        &self,
+        session_id: &str,
+        oid: &str,
+    ) -> Result<(), ClientError> {
+        let body_json = serde_json::json!({ "oid": oid });
+        let body = self
+            .post(&format!("/sessions/{}/restore", session_id), &body_json)
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Pong => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
     /// Send an HTTP GET request to the daemon over the Unix socket.
     async fn get(&self, path: &str) -> Result<Bytes, ClientError> {
         let stream = UnixStream::connect(&self.socket_path)

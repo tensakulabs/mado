@@ -187,6 +187,81 @@ pub fn delete_api_key() -> Result<(), String> {
     kobo_daemon::keystore::KeyStore::delete_api_key().map_err(|e| e.to_string())
 }
 
+// ── Versioning commands ──
+
+/// Save a milestone for a session.
+#[tauri::command]
+pub async fn save_milestone(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    message: String,
+) -> Result<kobo_core::types::Milestone, String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .save_milestone(&session_id, &message)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// List milestones for a session.
+#[tauri::command]
+pub async fn list_milestones(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    limit: Option<usize>,
+) -> Result<Vec<kobo_core::types::Milestone>, String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .list_milestones(&session_id, limit.unwrap_or(20))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Diff between two milestones.
+#[tauri::command]
+pub async fn diff_milestones(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    from_oid: String,
+    to_oid: String,
+) -> Result<kobo_core::types::DiffSummary, String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .diff_milestones(&session_id, &from_oid, &to_oid)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Restore to a milestone.
+#[tauri::command]
+pub async fn restore_milestone(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    oid: String,
+) -> Result<(), String> {
+    let guard = state.client.lock().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .restore_milestone(&session_id, &oid)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// List available AI models.
 #[tauri::command]
 pub fn list_models() -> Vec<ModelInfo> {

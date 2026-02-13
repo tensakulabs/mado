@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{DaemonStatus, Session, SessionId};
+use crate::types::{DaemonStatus, DiffSummary, Milestone, Session, SessionId};
 
 /// Requests that can be sent to the daemon.
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,4 +32,10 @@ pub enum DaemonResponse {
     Error { message: String },
     /// Pong response to a ping.
     Pong,
+    /// A milestone was saved.
+    MilestoneSaved { milestone: Milestone },
+    /// List of milestones.
+    Milestones { milestones: Vec<Milestone> },
+    /// Diff result between two commits.
+    DiffResult { diff: DiffSummary },
 }

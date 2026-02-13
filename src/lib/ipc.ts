@@ -27,6 +27,28 @@ export interface ModelInfo {
   description: string;
 }
 
+export interface Milestone {
+  oid: string;
+  message: string;
+  timestamp: string;
+  files_changed: number;
+  insertions: number;
+  deletions: number;
+}
+
+export interface FileDiff {
+  path: string;
+  insertions: number;
+  deletions: number;
+  status: string;
+}
+
+export interface DiffSummary {
+  files: FileDiff[];
+  total_insertions: number;
+  total_deletions: number;
+}
+
 // ── Daemon commands ──
 
 export async function healthCheck(): Promise<DaemonStatus> {
@@ -93,6 +115,41 @@ export async function setApiKey(key: string): Promise<void> {
 
 export async function deleteApiKey(): Promise<void> {
   return invoke<void>("delete_api_key");
+}
+
+// ── Versioning commands ──
+
+export async function saveMilestone(
+  sessionId: string,
+  message: string,
+): Promise<Milestone> {
+  return invoke<Milestone>("save_milestone", { sessionId, message });
+}
+
+export async function listMilestones(
+  sessionId: string,
+  limit?: number,
+): Promise<Milestone[]> {
+  return invoke<Milestone[]>("list_milestones", { sessionId, limit });
+}
+
+export async function diffMilestones(
+  sessionId: string,
+  fromOid: string,
+  toOid: string,
+): Promise<DiffSummary> {
+  return invoke<DiffSummary>("diff_milestones", {
+    sessionId,
+    fromOid,
+    toOid,
+  });
+}
+
+export async function restoreMilestone(
+  sessionId: string,
+  oid: string,
+): Promise<void> {
+  return invoke<void>("restore_milestone", { sessionId, oid });
 }
 
 // ── SSE bridge ──
