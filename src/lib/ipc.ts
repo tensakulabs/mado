@@ -17,6 +17,14 @@ export interface Session {
   created_at: string;
   updated_at: string;
   working_dir?: string;
+  command?: string;
+  shell_fallback: boolean;
+}
+
+export interface ModelInfo {
+  id: string;
+  name: string;
+  description: string;
 }
 
 // ── Daemon commands ──
@@ -65,6 +73,12 @@ export async function resizeSession(
   cols: number,
 ): Promise<void> {
   return invoke<void>("resize_session", { sessionId, rows, cols });
+}
+
+// ── Model commands ──
+
+export async function listModels(): Promise<ModelInfo[]> {
+  return invoke<ModelInfo[]>("list_models");
 }
 
 // ── SSE bridge ──

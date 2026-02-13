@@ -24,15 +24,30 @@ impl SessionManager {
         }
     }
 
-    /// Create a new session with a shell process.
+    /// Create a new session with a Claude CLI (or fallback shell) process.
     pub async fn create_session(
         &self,
         name: String,
         model: String,
         pty_size: PtySize,
+        api_key: Option<String>,
     ) -> Result<Session, SessionError> {
         let session_id = SessionId::new(Uuid::new_v4().to_string());
         let now = Utc::now();
+
+        // Spawn the PTY process with Claude CLI.
+        let spawn_result = {
+            let mut pm = self.process_manager.lock().await;
+            pm.create(
+                &session_id,
+                &model,
+                pty_size.rows,
+                pty_size.cols,
+                None, // working_dir
+                api_key.as_deref(),
+            )
+            .map_err(SessionError::ProcessError)?
+        };
 
         let session = Session {
             id: session_id.clone(),
@@ -42,14 +57,9 @@ impl SessionManager {
             created_at: now,
             updated_at: now,
             working_dir: None,
+            command: Some(spawn_result.command),
+            shell_fallback: spawn_result.shell_fallback,
         };
-
-        // Spawn the PTY process.
-        {
-            let mut pm = self.process_manager.lock().await;
-            pm.create(&session_id, pty_size.rows, pty_size.cols)
-                .map_err(SessionError::ProcessError)?;
-        }
 
         // Persist the session.
         {
@@ -57,7 +67,12 @@ impl SessionManager {
             state.add_session(session.clone());
         }
 
-        tracing::info!("Created session: {} ({})", session.id, session.name);
+        tracing::info!(
+            "Created session: {} ({}) [fallback={}]",
+            session.id,
+            session.name,
+            session.shell_fallback
+        );
         Ok(session)
     }
 

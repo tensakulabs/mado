@@ -31,6 +31,7 @@ pub fn run() {
             commands::write_input,
             commands::resize_session,
             bridge::attach_session,
+            commands::list_models,
         ])
         .setup(|app| {
             let state = app.state::<DaemonState>();

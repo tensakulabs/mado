@@ -20,9 +20,12 @@ function App() {
   const [daemonInfo, setDaemonInfo] = useState<DaemonStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const [shellFallback, setShellFallback] = useState(false);
+
   const root = usePaneStore((s) => s.root);
   const initSinglePane = usePaneStore((s) => s.initSinglePane);
   const createSession = useSessionStore((s) => s.createSession);
+  const defaultModel = useSessionStore((s) => s.defaultModel);
 
   // Activate keyboard shortcuts.
   useKeyboard();
@@ -45,13 +48,16 @@ function App() {
   const ensureInitialPane = useCallback(async () => {
     if (root) return; // Already initialized.
     try {
-      const session = await createSession("default", "sonnet", 24, 80);
+      const session = await createSession("default", defaultModel, 24, 80);
+      if (session.shell_fallback) {
+        setShellFallback(true);
+      }
       initSinglePane(session.id);
     } catch (err) {
       console.error("Failed to create initial session:", err);
       setErrorMessage(`Failed to create session: ${err}`);
     }
-  }, [root, createSession, initSinglePane]);
+  }, [root, createSession, initSinglePane, defaultModel]);
 
   const handleReconnect = useCallback(async () => {
     setConnectionState("connecting");
@@ -105,6 +111,27 @@ function App() {
     return (
       <div className="flex h-screen w-screen flex-col overflow-hidden">
         <Toolbar daemonInfo={daemonInfo} connectionState={connectionState} />
+        {shellFallback && (
+          <div className="flex items-center justify-between bg-yellow-900/30 px-3 py-1 text-xs text-yellow-300">
+            <span>
+              Claude CLI not found. Running in shell mode.{" "}
+              <a
+                href="https://docs.anthropic.com/en/docs/claude-cli"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-yellow-200"
+              >
+                Install Claude CLI
+              </a>
+            </span>
+            <button
+              onClick={() => setShellFallback(false)}
+              className="ml-2 text-yellow-500 hover:text-yellow-300"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         <div className="flex-1 min-h-0">
           <Layout />
         </div>

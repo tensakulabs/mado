@@ -10,6 +10,7 @@ interface SessionState {
   sessions: Session[];
   isLoading: boolean;
   error: string | null;
+  defaultModel: string;
 }
 
 interface SessionActions {
@@ -22,6 +23,7 @@ interface SessionActions {
   ) => Promise<Session>;
   destroySession: (sessionId: string) => Promise<void>;
   getSession: (sessionId: string) => Session | undefined;
+  setDefaultModel: (model: string) => void;
 }
 
 export const useSessionStore = create<SessionState & SessionActions>()(
@@ -29,6 +31,7 @@ export const useSessionStore = create<SessionState & SessionActions>()(
     sessions: [],
     isLoading: false,
     error: null,
+    defaultModel: "sonnet",
 
     fetchSessions: async () => {
       set({ isLoading: true, error: null });
@@ -62,6 +65,10 @@ export const useSessionStore = create<SessionState & SessionActions>()(
 
     getSession: (sessionId: string) => {
       return get().sessions.find((s) => s.id === sessionId);
+    },
+
+    setDefaultModel: (model: string) => {
+      set({ defaultModel: model });
     },
   }),
 );

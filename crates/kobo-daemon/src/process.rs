@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::io::Read;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use portable_pty::{CommandBuilder, native_pty_system, PtySize};
@@ -7,6 +8,17 @@ use tokio::sync::{broadcast, Mutex};
 use tracing;
 
 use kobo_core::types::SessionId;
+
+/// Valid model identifiers for Claude CLI.
+const VALID_MODELS: &[&str] = &["opus", "sonnet", "haiku"];
+
+/// Result of spawning a process, indicating what was actually launched.
+pub struct SpawnResult {
+    /// Whether the shell was used as fallback (claude not found).
+    pub shell_fallback: bool,
+    /// The command that was executed.
+    pub command: String,
+}
 
 /// A managed process running in a PTY.
 pub struct ManagedProcess {
@@ -58,13 +70,24 @@ impl ProcessManager {
         }
     }
 
-    /// Spawn a new shell process in a PTY.
+    /// Spawn a new process in a PTY.
+    ///
+    /// Attempts to launch Claude CLI with the given model. If Claude CLI is not
+    /// found on the system, falls back to the user's default shell.
     pub fn create(
         &mut self,
         session_id: &SessionId,
+        model: &str,
         rows: u16,
         cols: u16,
-    ) -> Result<(), ProcessError> {
+        working_dir: Option<&str>,
+        api_key: Option<&str>,
+    ) -> Result<SpawnResult, ProcessError> {
+        // Validate model.
+        if !VALID_MODELS.contains(&model) {
+            return Err(ProcessError::InvalidModel(model.to_string()));
+        }
+
         let pty_system = native_pty_system();
 
         let pty_size = PtySize {
@@ -78,12 +101,46 @@ impl ProcessManager {
             .openpty(pty_size)
             .map_err(|e| ProcessError::PtyOpenFailed(e.to_string()))?;
 
-        // Determine the shell to use.
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+        // Try to find Claude CLI.
+        let claude_path = find_claude_binary();
 
-        let mut cmd = CommandBuilder::new(&shell);
-        cmd.env("TERM", "xterm-256color");
-        cmd.env("COLORTERM", "truecolor");
+        let (cmd, shell_fallback, command_str) = if let Some(claude) = claude_path {
+            let mut cmd = CommandBuilder::new(&claude);
+            cmd.arg("--model");
+            cmd.arg(model);
+            cmd.env("TERM", "xterm-256color");
+            cmd.env("COLORTERM", "truecolor");
+
+            // Pass API key if available.
+            if let Some(key) = api_key {
+                cmd.env("ANTHROPIC_API_KEY", key);
+            }
+
+            // Set working directory.
+            if let Some(dir) = working_dir {
+                cmd.cwd(dir);
+            } else if let Ok(home) = std::env::var("HOME") {
+                cmd.cwd(home);
+            }
+
+            let cmd_str = format!("{} --model {}", claude.display(), model);
+            (cmd, false, cmd_str)
+        } else {
+            tracing::warn!("Claude CLI not found, falling back to shell");
+            let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/zsh".to_string());
+            let mut cmd = CommandBuilder::new(&shell);
+            cmd.env("TERM", "xterm-256color");
+            cmd.env("COLORTERM", "truecolor");
+
+            if let Some(dir) = working_dir {
+                cmd.cwd(dir);
+            } else if let Ok(home) = std::env::var("HOME") {
+                cmd.cwd(home);
+            }
+
+            let cmd_str = shell.clone();
+            (cmd, true, cmd_str)
+        };
 
         let child = pair
             .slave
@@ -103,7 +160,7 @@ impl ProcessManager {
         // Create broadcast channel for output.
         let (output_tx, _) = broadcast::channel(64);
 
-        // Spawn a task to read PTY output and broadcast it.
+        // Spawn a thread to read PTY output and broadcast it.
         let tx_clone = output_tx.clone();
         let sid = session_id.as_str().to_string();
         std::thread::spawn(move || {
@@ -119,18 +176,24 @@ impl ProcessManager {
 
         self.processes.insert(session_id.as_str().to_string(), managed);
 
-        tracing::info!("Spawned shell process for session {}", session_id);
-        Ok(())
+        tracing::info!(
+            "Spawned process for session {} (command: {}, fallback: {})",
+            session_id,
+            command_str,
+            shell_fallback
+        );
+
+        Ok(SpawnResult {
+            shell_fallback,
+            command: command_str,
+        })
     }
 
     /// Destroy a process (kill it and clean up).
     pub fn destroy(&mut self, session_id: &SessionId) -> Result<(), ProcessError> {
         if let Some(mut process) = self.processes.remove(session_id.as_str()) {
-            // Drop the writer and master to signal EOF to the child.
             drop(process.writer);
             drop(process.master);
-            // The child process should exit when its PTY is closed.
-            // We also explicitly try to kill it.
             if let Err(e) = process._child.kill() {
                 tracing::warn!("Failed to kill process for session {}: {}", session_id, e);
             }
@@ -193,6 +256,46 @@ impl ProcessManager {
     }
 }
 
+/// Find the Claude CLI binary on the system.
+///
+/// Checks: PATH, ~/.claude/local/bin/claude, /usr/local/bin/claude
+fn find_claude_binary() -> Option<PathBuf> {
+    // Check PATH first via `which`.
+    if let Ok(output) = std::process::Command::new("which")
+        .arg("claude")
+        .output()
+    {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                let p = PathBuf::from(&path);
+                if p.exists() {
+                    tracing::debug!("Found claude at: {}", p.display());
+                    return Some(p);
+                }
+            }
+        }
+    }
+
+    // Check common install locations.
+    let candidates = [
+        dirs::home_dir()
+            .map(|h| h.join(".claude").join("local").join("bin").join("claude")),
+        Some(PathBuf::from("/usr/local/bin/claude")),
+        Some(PathBuf::from("/opt/homebrew/bin/claude")),
+    ];
+
+    for candidate in candidates.into_iter().flatten() {
+        if candidate.exists() {
+            tracing::debug!("Found claude at: {}", candidate.display());
+            return Some(candidate);
+        }
+    }
+
+    tracing::warn!("Claude CLI not found on system");
+    None
+}
+
 /// Read PTY output in a blocking thread and broadcast it.
 fn read_pty_output(
     mut reader: Box<dyn Read + Send>,
@@ -208,7 +311,6 @@ fn read_pty_output(
             }
             Ok(n) => {
                 let data = buf[..n].to_vec();
-                // If no receivers, that's fine -- output is lost (nobody is watching).
                 let _ = tx.send(data);
             }
             Err(e) => {
@@ -242,6 +344,9 @@ pub enum ProcessError {
 
     #[error("Failed to resize: {0}")]
     ResizeFailed(String),
+
+    #[error("Invalid model: {0}. Valid models: opus, sonnet, haiku")]
+    InvalidModel(String),
 }
 
 /// Thread-safe wrapper for ProcessManager.

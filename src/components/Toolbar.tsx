@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { usePaneStore } from "../stores/panes";
 import { useSessionStore } from "../stores/sessions";
+import { ModelPicker } from "./ModelPicker";
 import type { DaemonStatus } from "../lib/ipc";
 
 interface ToolbarProps {
@@ -14,6 +15,7 @@ export function Toolbar({ daemonInfo, connectionState }: ToolbarProps) {
   const undoClose = usePaneStore((s) => s.undoClose);
   const leaves = usePaneStore((s) => s.getLeaves);
   const createSession = useSessionStore((s) => s.createSession);
+  const defaultModel = useSessionStore((s) => s.defaultModel);
 
   const statusDot = {
     connecting: "bg-yellow-400 animate-pulse",
@@ -25,11 +27,10 @@ export function Toolbar({ daemonInfo, connectionState }: ToolbarProps) {
     try {
       const session = await createSession(
         `conv-${Date.now()}`,
-        "sonnet",
+        defaultModel,
         24,
         80,
       );
-      // If there's already a pane, split horizontally. Otherwise the store handles it.
       const panes = leaves();
       if (panes.length > 0) {
         splitPane("horizontal", session.id);
@@ -37,13 +38,13 @@ export function Toolbar({ daemonInfo, connectionState }: ToolbarProps) {
     } catch (err) {
       console.error("Failed to create conversation:", err);
     }
-  }, [createSession, splitPane, leaves]);
+  }, [createSession, splitPane, leaves, defaultModel]);
 
   const handleSplitH = useCallback(async () => {
     try {
       const session = await createSession(
         `conv-${Date.now()}`,
-        "sonnet",
+        defaultModel,
         24,
         80,
       );
@@ -51,13 +52,13 @@ export function Toolbar({ daemonInfo, connectionState }: ToolbarProps) {
     } catch (err) {
       console.error("Failed to split:", err);
     }
-  }, [createSession, splitPane]);
+  }, [createSession, splitPane, defaultModel]);
 
   const handleSplitV = useCallback(async () => {
     try {
       const session = await createSession(
         `conv-${Date.now()}`,
-        "sonnet",
+        defaultModel,
         24,
         80,
       );
@@ -65,7 +66,7 @@ export function Toolbar({ daemonInfo, connectionState }: ToolbarProps) {
     } catch (err) {
       console.error("Failed to split:", err);
     }
-  }, [createSession, splitPane]);
+  }, [createSession, splitPane, defaultModel]);
 
   const handleUndo = useCallback(() => {
     undoClose();
@@ -88,6 +89,8 @@ export function Toolbar({ daemonInfo, connectionState }: ToolbarProps) {
 
       {/* Center: actions */}
       <div className="flex items-center gap-1">
+        <ModelPicker />
+        <div className="mx-1 h-3 w-px bg-gray-700/50" />
         <button
           onClick={handleNewConversation}
           className="rounded px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-700/50 hover:text-gray-200"

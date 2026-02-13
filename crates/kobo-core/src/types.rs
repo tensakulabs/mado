@@ -47,6 +47,12 @@ pub struct Session {
     pub updated_at: DateTime<Utc>,
     #[serde(default)]
     pub working_dir: Option<String>,
+    /// The actual command that was spawned (e.g., "claude --model sonnet" or "/bin/zsh").
+    #[serde(default)]
+    pub command: Option<String>,
+    /// Whether the session is running in shell fallback mode (claude not found).
+    #[serde(default)]
+    pub shell_fallback: bool,
 }
 
 /// Status information about the running daemon.

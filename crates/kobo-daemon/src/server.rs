@@ -175,7 +175,7 @@ async fn create_session_handler(
 
     match state
         .session_manager
-        .create_session(body.name, body.model, pty_size)
+        .create_session(body.name, body.model, pty_size, None)
         .await
     {
         Ok(session) => Json(DaemonResponse::SessionCreated { session }),

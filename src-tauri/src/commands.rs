@@ -3,6 +3,8 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
+use serde::Serialize;
+
 use kobo_core::client::DaemonClient;
 use kobo_core::types::{DaemonStatus, Session};
 
@@ -157,4 +159,34 @@ pub async fn resize_session(
         .resize_session(&session_id, rows, cols)
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Available model info.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+}
+
+/// List available AI models.
+#[tauri::command]
+pub fn list_models() -> Vec<ModelInfo> {
+    vec![
+        ModelInfo {
+            id: "opus".to_string(),
+            name: "Claude Opus".to_string(),
+            description: "Most capable, best for complex tasks".to_string(),
+        },
+        ModelInfo {
+            id: "sonnet".to_string(),
+            name: "Claude Sonnet".to_string(),
+            description: "Balanced performance and speed".to_string(),
+        },
+        ModelInfo {
+            id: "haiku".to_string(),
+            name: "Claude Haiku".to_string(),
+            description: "Fastest, great for quick tasks".to_string(),
+        },
+    ]
 }

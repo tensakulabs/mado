@@ -163,6 +163,8 @@ fn test_state_persistence_save_and_load() {
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         working_dir: None,
+        command: None,
+        shell_fallback: false,
     });
 
     // Save
