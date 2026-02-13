@@ -30,7 +30,16 @@ body {
 
 #root {
   height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* Ensure xterm fills its container */
+.xterm {
+  height: 100%;
+  width: 100%;
+}
+
+.xterm-viewport {
+  overflow-y: auto !important;
 }
