@@ -2,6 +2,10 @@ import { useEffect, useRef, useCallback } from "react";
 import { usePaneStore } from "../stores/panes";
 import { useSessionStore } from "../stores/sessions";
 
+interface UseKeyboardOptions {
+  onOpenCommandPalette?: () => void;
+}
+
 /**
  * Keyboard shortcut handler with tmux-like prefix key (Ctrl+B).
  *
@@ -12,8 +16,11 @@ import { useSessionStore } from "../stores/sessions";
  * - x -> close current pane
  * - z -> undo close
  * - c -> new conversation
+ *
+ * Global shortcuts (no prefix):
+ * - Cmd+K / Ctrl+K -> open command palette
  */
-export function useKeyboard() {
+export function useKeyboard(options: UseKeyboardOptions = {}) {
   const prefixActive = useRef(false);
   const prefixTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -23,13 +30,14 @@ export function useKeyboard() {
   const navigateFocus = usePaneStore((s) => s.navigateFocus);
   const activePaneId = usePaneStore((s) => s.activePaneId);
   const createSession = useSessionStore((s) => s.createSession);
+  const defaultModel = useSessionStore((s) => s.defaultModel);
 
   const handleSplit = useCallback(
     async (direction: "horizontal" | "vertical") => {
       try {
         const session = await createSession(
-          `conv-${Date.now()}`,
-          "sonnet",
+          `conversation-${Date.now()}`,
+          defaultModel,
           24,
           80,
         );
@@ -38,11 +46,18 @@ export function useKeyboard() {
         console.error("Failed to split:", err);
       }
     },
-    [createSession, splitPane],
+    [createSession, splitPane, defaultModel],
   );
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      // Cmd+K / Ctrl+K -> open command palette (UX-01).
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        options.onOpenCommandPalette?.();
+        return;
+      }
+
       // Ctrl+B activates prefix mode.
       if (e.ctrlKey && e.key === "b") {
         e.preventDefault();
@@ -116,5 +131,6 @@ export function useKeyboard() {
     closePane,
     undoClose,
     activePaneId,
+    options,
   ]);
 }

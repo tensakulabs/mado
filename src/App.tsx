@@ -8,6 +8,9 @@ import {
   onDaemonError,
 } from "./lib/ipc";
 import { ApiKeySetup } from "./components/ApiKeySetup";
+import { CommandPalette } from "./components/CommandPalette";
+import { StatusBar } from "./components/StatusBar";
+import { ContextualHints } from "./components/ContextualHints";
 import { usePaneStore } from "./stores/panes";
 import { useSessionStore } from "./stores/sessions";
 import { Layout } from "./components/Layout";
@@ -24,14 +27,17 @@ function App() {
 
   const [shellFallback, setShellFallback] = useState(false);
   const [needsApiKey, setNeedsApiKey] = useState<boolean | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const root = usePaneStore((s) => s.root);
   const initSinglePane = usePaneStore((s) => s.initSinglePane);
   const createSession = useSessionStore((s) => s.createSession);
   const defaultModel = useSessionStore((s) => s.defaultModel);
 
-  // Activate keyboard shortcuts.
-  useKeyboard();
+  // Activate keyboard shortcuts with command palette integration.
+  useKeyboard({
+    onOpenCommandPalette: () => setCommandPaletteOpen(true),
+  });
 
   const fetchHealth = useCallback(async () => {
     try {
@@ -139,7 +145,11 @@ function App() {
   if (connectionState === "connected" && root) {
     return (
       <div className="flex h-screen w-screen flex-col overflow-hidden">
-        <Toolbar daemonInfo={daemonInfo} connectionState={connectionState} />
+        <Toolbar
+          daemonInfo={daemonInfo}
+          connectionState={connectionState}
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+        />
         {shellFallback && (
           <div className="flex items-center justify-between bg-yellow-900/30 px-3 py-1 text-xs text-yellow-300">
             <span>
@@ -164,6 +174,16 @@ function App() {
         <div className="flex-1 min-h-0">
           <Layout />
         </div>
+        <StatusBar connectionState={connectionState} />
+
+        {/* Command palette overlay (UX-01, UX-02, UX-03) */}
+        <CommandPalette
+          isOpen={commandPaletteOpen}
+          onClose={() => setCommandPaletteOpen(false)}
+        />
+
+        {/* Contextual hints for new users (UX-08, UX-09) */}
+        <ContextualHints enabled={true} />
       </div>
     );
   }
