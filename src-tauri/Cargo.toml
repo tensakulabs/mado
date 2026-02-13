@@ -14,6 +14,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 kobo-core = { path = "../crates/kobo-core" }
+kobo-daemon = { path = "../crates/kobo-daemon" }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-shell = "2"
 serde = { workspace = true }

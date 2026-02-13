@@ -3,9 +3,11 @@ import {
   type DaemonStatus,
   healthCheck,
   reconnect,
+  hasApiKey,
   onDaemonConnected,
   onDaemonError,
 } from "./lib/ipc";
+import { ApiKeySetup } from "./components/ApiKeySetup";
 import { usePaneStore } from "./stores/panes";
 import { useSessionStore } from "./stores/sessions";
 import { Layout } from "./components/Layout";
@@ -21,6 +23,7 @@ function App() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const [shellFallback, setShellFallback] = useState(false);
+  const [needsApiKey, setNeedsApiKey] = useState<boolean | null>(null);
 
   const root = usePaneStore((s) => s.root);
   const initSinglePane = usePaneStore((s) => s.initSinglePane);
@@ -88,11 +91,21 @@ function App() {
       setErrorMessage(error);
     });
 
-    // Initial health check and session creation.
+    // Initial health check, API key check, and session creation.
     (async () => {
       const healthy = await fetchHealth();
       if (healthy) {
-        await ensureInitialPane();
+        try {
+          const keyExists = await hasApiKey();
+          setNeedsApiKey(!keyExists);
+          if (keyExists) {
+            await ensureInitialPane();
+          }
+        } catch {
+          // If key check fails, proceed anyway.
+          setNeedsApiKey(false);
+          await ensureInitialPane();
+        }
       }
     })();
 
@@ -105,6 +118,22 @@ function App() {
       unlistenError.then((fn) => fn());
     };
   }, [fetchHealth, ensureInitialPane]);
+
+  // Show API key setup if needed.
+  if (connectionState === "connected" && needsApiKey === true) {
+    return (
+      <ApiKeySetup
+        onComplete={async () => {
+          setNeedsApiKey(false);
+          await ensureInitialPane();
+        }}
+        onSkip={async () => {
+          setNeedsApiKey(false);
+          await ensureInitialPane();
+        }}
+      />
+    );
+  }
 
   // Show full multi-pane UI when connected with panes.
   if (connectionState === "connected" && root) {

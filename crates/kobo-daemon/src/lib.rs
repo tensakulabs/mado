@@ -1,3 +1,4 @@
+pub mod keystore;
 pub mod lifecycle;
 pub mod pid;
 pub mod process;

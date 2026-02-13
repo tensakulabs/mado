@@ -29,6 +29,7 @@ futures = "0.3"
 tokio-stream = { version = "0.1", features = ["sync"] }
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "6"
+keyring = "3.6.3"
 
 [dev-dependencies]
 tempfile = "3"

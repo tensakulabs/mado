@@ -169,6 +169,24 @@ pub struct ModelInfo {
     pub description: String,
 }
 
+/// Check if an API key is configured.
+#[tauri::command]
+pub fn has_api_key() -> bool {
+    kobo_daemon::keystore::KeyStore::has_api_key()
+}
+
+/// Set the Anthropic API key.
+#[tauri::command]
+pub fn set_api_key(key: String) -> Result<(), String> {
+    kobo_daemon::keystore::KeyStore::set_api_key(&key).map_err(|e| e.to_string())
+}
+
+/// Delete the stored API key.
+#[tauri::command]
+pub fn delete_api_key() -> Result<(), String> {
+    kobo_daemon::keystore::KeyStore::delete_api_key().map_err(|e| e.to_string())
+}
+
 /// List available AI models.
 #[tauri::command]
 pub fn list_models() -> Vec<ModelInfo> {

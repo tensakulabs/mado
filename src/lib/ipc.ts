@@ -81,6 +81,20 @@ export async function listModels(): Promise<ModelInfo[]> {
   return invoke<ModelInfo[]>("list_models");
 }
 
+// ── API key commands ──
+
+export async function hasApiKey(): Promise<boolean> {
+  return invoke<boolean>("has_api_key");
+}
+
+export async function setApiKey(key: string): Promise<void> {
+  return invoke<void>("set_api_key", { key });
+}
+
+export async function deleteApiKey(): Promise<void> {
+  return invoke<void>("delete_api_key");
+}
+
 // ── SSE bridge ──
 
 /**
