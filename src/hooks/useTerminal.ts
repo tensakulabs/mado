@@ -92,7 +92,12 @@ export function useTerminal(sessionId: string | null): UseTerminalResult {
     // Focus the terminal.
     terminal.focus();
 
+    // Add click handler to refocus terminal when clicked.
+    const handleClick = () => terminal.focus();
+    container.addEventListener("click", handleClick);
+
     return () => {
+      container.removeEventListener("click", handleClick);
       disposed = true;
       inputDisposable.dispose();
       resizeDisposable.dispose();
