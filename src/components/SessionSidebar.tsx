@@ -229,7 +229,7 @@ export function SessionSidebar() {
   }
 
   return (
-    <div className="flex h-full w-56 flex-shrink-0 flex-col border-r border-theme-primary bg-theme-secondary">
+    <div className="flex h-full flex-shrink-0 flex-col border-r border-theme-primary bg-theme-secondary" style={{ width: "var(--sidebar-width, 14rem)" }}>
       {/* Header */}
       <div className="flex items-center justify-between border-b border-theme-primary px-3 py-2">
         <span className="text-xs font-medium uppercase tracking-wider text-theme-muted">
