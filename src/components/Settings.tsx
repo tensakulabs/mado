@@ -7,7 +7,7 @@ import {
   checkCliAuth,
   checkCliInstalled,
   getUserDisplayName,
-  type KoboConfig,
+  type MadoConfig,
 } from "../lib/ipc";
 import { useUiStore, THEME_PRESETS } from "../stores/ui";
 
@@ -89,7 +89,7 @@ const SECTIONS: { id: SettingsSection; label: string; icon: React.ReactNode }[] 
  */
 export function Settings({ onBack }: SettingsProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
-  const [config, setConfig] = useState<KoboConfig | null>(null);
+  const [config, setConfig] = useState<MadoConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);

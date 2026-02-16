@@ -49,7 +49,7 @@ struct ClaudeContentBlock {
 }
 
 /// Convert a working directory path to Claude's project directory name.
-/// e.g., "/Users/justintieu/tensakulabs/kobo" -> "-Users-justintieu-tensakulabs-kobo"
+/// e.g., "/Users/justintieu/tensakulabs/mado" -> "-Users-justintieu-tensakulabs-mado"
 fn path_to_project_name(path: &Path) -> String {
     path.to_string_lossy()
         .replace('/', "-")

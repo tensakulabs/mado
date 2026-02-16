@@ -129,7 +129,7 @@ impl DaemonClient {
         tracing::info!("No running daemon found, starting one...");
 
         // Clean up stale PID file if the process is dead.
-        let pid_path = socket_path.with_file_name("kobo.pid");
+        let pid_path = socket_path.with_file_name("mado.pid");
         if pid_path.exists() {
             if let Ok(contents) = std::fs::read_to_string(&pid_path) {
                 if let Ok(pid) = contents.trim().parse::<u32>() {
@@ -701,24 +701,24 @@ impl DaemonClient {
     }
 }
 
-/// Default socket path: ~/.kobo/kobo.sock
+/// Default socket path: ~/.mado/mado.sock
 pub fn default_socket_path() -> PathBuf {
-    dirs_path().join("kobo.sock")
+    dirs_path().join("mado.sock")
 }
 
-/// Default PID file path: ~/.kobo/kobo.pid
+/// Default PID file path: ~/.mado/mado.pid
 pub fn default_pid_path() -> PathBuf {
-    dirs_path().join("kobo.pid")
+    dirs_path().join("mado.pid")
 }
 
-/// Default state file path: ~/.kobo/state.json
+/// Default state file path: ~/.mado/state.json
 pub fn default_state_path() -> PathBuf {
     dirs_path().join("state.json")
 }
 
-/// The ~/.kobo/ directory path.
+/// The ~/.mado/ directory path.
 pub fn dirs_path() -> PathBuf {
     dirs::home_dir()
         .expect("Failed to determine home directory")
-        .join(".kobo")
+        .join(".mado")
 }

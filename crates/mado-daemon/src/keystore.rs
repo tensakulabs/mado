@@ -1,6 +1,6 @@
 use tracing;
 
-const SERVICE_NAME: &str = "kobo";
+const SERVICE_NAME: &str = "mado";
 const USERNAME: &str = "anthropic-api-key";
 
 /// Secure storage for API keys using the OS keychain (macOS Keychain / Linux libsecret).

@@ -196,22 +196,22 @@ pub fn delete_api_key() -> Result<(), String> {
 
 // ── Config commands ──
 
-/// Get the current Kobo configuration.
+/// Get the current Mado configuration.
 #[tauri::command]
-pub fn get_config() -> Result<mado_daemon::config::KoboConfig, String> {
-    mado_daemon::config::KoboConfig::load().map_err(|e| e.to_string())
+pub fn get_config() -> Result<mado_daemon::config::MadoConfig, String> {
+    mado_daemon::config::MadoConfig::load().map_err(|e| e.to_string())
 }
 
-/// Update Kobo configuration.
+/// Update Mado configuration.
 #[tauri::command]
-pub fn update_config(config: mado_daemon::config::KoboConfig) -> Result<(), String> {
+pub fn update_config(config: mado_daemon::config::MadoConfig) -> Result<(), String> {
     config.save().map_err(|e| e.to_string())
 }
 
 /// Mark setup as complete in config.
 #[tauri::command]
 pub fn complete_setup() -> Result<(), String> {
-    let mut config = mado_daemon::config::KoboConfig::load().map_err(|e| e.to_string())?;
+    let mut config = mado_daemon::config::MadoConfig::load().map_err(|e| e.to_string())?;
     config.setup_complete = true;
     config.save().map_err(|e| e.to_string())
 }
@@ -219,7 +219,7 @@ pub fn complete_setup() -> Result<(), String> {
 /// Check if setup has been completed.
 #[tauri::command]
 pub fn is_setup_complete() -> Result<bool, String> {
-    let config = mado_daemon::config::KoboConfig::load().map_err(|e| e.to_string())?;
+    let config = mado_daemon::config::MadoConfig::load().map_err(|e| e.to_string())?;
     Ok(config.setup_complete)
 }
 

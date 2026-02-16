@@ -176,10 +176,10 @@ fn create_app_state(daemon_state: Arc<Mutex<DaemonState>>, state_path: PathBuf) 
     let process_manager = new_shared_process_manager();
     let session_manager = Arc::new(SessionManager::new(daemon_state.clone(), process_manager));
 
-    // Create conversation manager with storage in ~/.kobo/conversations/.
+    // Create conversation manager with storage in ~/.mado/conversations/.
     let storage_dir = dirs::home_dir()
-        .map(|h| h.join(".kobo").join("conversations"))
-        .unwrap_or_else(|| std::path::PathBuf::from("/tmp/kobo/conversations"));
+        .map(|h| h.join(".mado").join("conversations"))
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp/mado/conversations"));
     let conversation_manager = Arc::new(ConversationManager::new(storage_dir, daemon_state, state_path));
 
     AppState {

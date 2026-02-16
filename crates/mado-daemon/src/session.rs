@@ -35,13 +35,13 @@ impl SessionManager {
         let session_id = SessionId::new(Uuid::new_v4().to_string());
         let now = Utc::now();
 
-        // Resolve working directory - default to ~/kobo if not specified.
+        // Resolve working directory - default to ~/mado if not specified.
         let working_dir = match cwd {
             Some(dir) => dir,
             None => {
                 let default_dir = dirs::home_dir()
-                    .map(|h| h.join("kobo"))
-                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp/kobo"));
+                    .map(|h| h.join("mado"))
+                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp/mado"));
                 // Create the default directory if it doesn't exist.
                 if !default_dir.exists() {
                     std::fs::create_dir_all(&default_dir).ok();

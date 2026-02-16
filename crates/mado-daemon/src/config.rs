@@ -1,6 +1,6 @@
-//! Kobo configuration management.
+//! Mado configuration management.
 //!
-//! Stores app settings in ~/.kobo/config.json.
+//! Stores app settings in ~/.mado/config.json.
 //! API keys are NOT stored here — they use the OS keychain.
 
 use serde::{Deserialize, Serialize};
@@ -11,14 +11,14 @@ use tracing;
 /// Configuration version for migrations.
 const CONFIG_VERSION: u32 = 1;
 
-/// Get the Kobo config directory (~/.kobo/).
+/// Get the Mado config directory (~/.mado/).
 pub fn config_dir() -> PathBuf {
     dirs::home_dir()
         .expect("Could not determine home directory")
-        .join(".kobo")
+        .join(".mado")
 }
 
-/// Get the config file path (~/.kobo/config.json).
+/// Get the config file path (~/.mado/config.json).
 pub fn config_path() -> PathBuf {
     config_dir().join("config.json")
 }
@@ -67,9 +67,9 @@ impl Default for UiConfig {
     }
 }
 
-/// Main Kobo configuration.
+/// Main Mado configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct KoboConfig {
+pub struct MadoConfig {
     /// Config schema version for future migrations.
     #[serde(default = "default_version")]
     pub version: u32,
@@ -111,7 +111,7 @@ fn default_model() -> String {
     "sonnet".to_string()
 }
 
-impl Default for KoboConfig {
+impl Default for MadoConfig {
     fn default() -> Self {
         Self {
             version: CONFIG_VERSION,
@@ -124,8 +124,8 @@ impl Default for KoboConfig {
     }
 }
 
-impl KoboConfig {
-    /// Load config from ~/.kobo/config.json.
+impl MadoConfig {
+    /// Load config from ~/.mado/config.json.
     /// Creates default config if file doesn't exist.
     pub fn load() -> Result<Self, ConfigError> {
         let path = config_path();
@@ -147,7 +147,7 @@ impl KoboConfig {
         Ok(config)
     }
 
-    /// Save config to ~/.kobo/config.json.
+    /// Save config to ~/.mado/config.json.
     pub fn save(&self) -> Result<(), ConfigError> {
         let dir = config_dir();
         if !dir.exists() {

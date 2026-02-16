@@ -177,7 +177,7 @@ export interface UiConfig {
   ai_name?: string;
 }
 
-export interface KoboConfig {
+export interface MadoConfig {
   version: number;
   provider: string;
   auth_method: "cli" | "api_key";
@@ -186,11 +186,11 @@ export interface KoboConfig {
   ui: UiConfig;
 }
 
-export async function getConfig(): Promise<KoboConfig> {
-  return invoke<KoboConfig>("get_config");
+export async function getConfig(): Promise<MadoConfig> {
+  return invoke<MadoConfig>("get_config");
 }
 
-export async function updateConfig(config: KoboConfig): Promise<void> {
+export async function updateConfig(config: MadoConfig): Promise<void> {
   return invoke<void>("update_config", { config });
 }
 

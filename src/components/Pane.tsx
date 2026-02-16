@@ -115,7 +115,7 @@ export function Pane({ paneId, sessionId }: PaneProps) {
   const getWorkspaceDisplay = useCallback(() => {
     const workingDir = session?.working_dir;
     if (!workingDir) return "default";
-    if (workingDir.endsWith("/kobo") || workingDir === "kobo") {
+    if (workingDir.endsWith("/mado") || workingDir === "mado") {
       return "default";
     }
     return workingDir.split("/").pop() || "default";
