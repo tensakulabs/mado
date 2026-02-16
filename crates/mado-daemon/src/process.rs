@@ -7,7 +7,7 @@ use portable_pty::{CommandBuilder, native_pty_system, PtySize};
 use tokio::sync::{broadcast, Mutex};
 use tracing;
 
-use kobo_core::types::SessionId;
+use mado_core::types::SessionId;
 
 /// Valid model identifiers for Claude CLI.
 const VALID_MODELS: &[&str] = &["opus", "sonnet", "haiku"];

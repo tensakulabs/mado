@@ -1,16 +1,16 @@
 [package]
-name = "kobo-daemon"
+name = "mado-daemon"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 description = "Background daemon for Kobo - manages Claude CLI sessions"
 
 [[bin]]
-name = "kobo-daemon"
+name = "mado-daemon"
 path = "src/main.rs"
 
 [dependencies]
-kobo-core = { path = "../kobo-core" }
+mado-core = { path = "../mado-core" }
 axum = { version = "0.8", features = ["json"] }
 tokio = { workspace = true }
 hyper = { version = "1", features = ["server", "http1"] }
@@ -36,7 +36,7 @@ git2 = "0.20.4"
 [dev-dependencies]
 tempfile = "3"
 http-body-util = "0.1"
-kobo-core = { path = "../kobo-core" }
+mado-core = { path = "../mado-core" }
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["tokio", "http1"] }
 tokio = { workspace = true }

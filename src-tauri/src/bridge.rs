@@ -1,4 +1,4 @@
-use kobo_core::types::StreamEvent;
+use mado_core::types::StreamEvent;
 use tauri::ipc::Channel;
 use tauri::State;
 

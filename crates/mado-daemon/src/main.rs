@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use kobo_core::client::{default_pid_path, default_socket_path, default_state_path};
-use kobo_daemon::lifecycle::{daemonize, DaemonConfig, start};
+use mado_core::client::{default_pid_path, default_socket_path, default_state_path};
+use mado_daemon::lifecycle::{daemonize, DaemonConfig, start};
 
 /// CLI arguments for the daemon.
 struct DaemonArgs {
@@ -112,7 +112,7 @@ async fn async_main(args: DaemonArgs) {
         .init();
 
     tracing::info!(
-        "Starting kobo-daemon v{} (pid: {})",
+        "Starting mado-daemon v{} (pid: {})",
         env!("CARGO_PKG_VERSION"),
         std::process::id()
     );

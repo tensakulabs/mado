@@ -15,7 +15,7 @@ use tokio::sync::{broadcast, Mutex, RwLock};
 use tracing;
 use uuid::Uuid;
 
-use kobo_core::types::{
+use mado_core::types::{
     ConversationState, Message, MessageRole, SessionId, StreamEvent, TokenUsage, ToolCall,
     ToolCallStatus,
 };
@@ -236,7 +236,7 @@ impl ConversationManager {
         cmd.arg("--model").arg(&model);
 
         // CRITICAL: Remove CLAUDECODE env var to prevent "nested sessions" error.
-        // This allows kobo-daemon to spawn Claude CLI even when running in a
+        // This allows mado-daemon to spawn Claude CLI even when running in a
         // terminal that's inside another Claude Code session.
         cmd.env_remove("CLAUDECODE");
 

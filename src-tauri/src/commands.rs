@@ -5,8 +5,8 @@ use tokio::sync::RwLock;
 
 use serde::Serialize;
 
-use kobo_core::client::DaemonClient;
-use kobo_core::types::{DaemonStatus, Message, Session};
+use mado_core::client::DaemonClient;
+use mado_core::types::{DaemonStatus, Message, Session};
 
 /// Shared daemon state managed by Tauri.
 /// Uses RwLock instead of Mutex to allow concurrent read access.
@@ -177,7 +177,7 @@ pub struct ModelInfo {
 /// Check if an API key is configured.
 #[tauri::command]
 pub fn has_api_key() -> bool {
-    let result = kobo_daemon::keystore::KeyStore::has_api_key();
+    let result = mado_daemon::keystore::KeyStore::has_api_key();
     tracing::info!("[has_api_key] Result: {}", result);
     result
 }
@@ -185,33 +185,33 @@ pub fn has_api_key() -> bool {
 /// Set the Anthropic API key.
 #[tauri::command]
 pub fn set_api_key(key: String) -> Result<(), String> {
-    kobo_daemon::keystore::KeyStore::set_api_key(&key).map_err(|e| e.to_string())
+    mado_daemon::keystore::KeyStore::set_api_key(&key).map_err(|e| e.to_string())
 }
 
 /// Delete the stored API key.
 #[tauri::command]
 pub fn delete_api_key() -> Result<(), String> {
-    kobo_daemon::keystore::KeyStore::delete_api_key().map_err(|e| e.to_string())
+    mado_daemon::keystore::KeyStore::delete_api_key().map_err(|e| e.to_string())
 }
 
 // ── Config commands ──
 
 /// Get the current Kobo configuration.
 #[tauri::command]
-pub fn get_config() -> Result<kobo_daemon::config::KoboConfig, String> {
-    kobo_daemon::config::KoboConfig::load().map_err(|e| e.to_string())
+pub fn get_config() -> Result<mado_daemon::config::KoboConfig, String> {
+    mado_daemon::config::KoboConfig::load().map_err(|e| e.to_string())
 }
 
 /// Update Kobo configuration.
 #[tauri::command]
-pub fn update_config(config: kobo_daemon::config::KoboConfig) -> Result<(), String> {
+pub fn update_config(config: mado_daemon::config::KoboConfig) -> Result<(), String> {
     config.save().map_err(|e| e.to_string())
 }
 
 /// Mark setup as complete in config.
 #[tauri::command]
 pub fn complete_setup() -> Result<(), String> {
-    let mut config = kobo_daemon::config::KoboConfig::load().map_err(|e| e.to_string())?;
+    let mut config = mado_daemon::config::KoboConfig::load().map_err(|e| e.to_string())?;
     config.setup_complete = true;
     config.save().map_err(|e| e.to_string())
 }
@@ -219,7 +219,7 @@ pub fn complete_setup() -> Result<(), String> {
 /// Check if setup has been completed.
 #[tauri::command]
 pub fn is_setup_complete() -> Result<bool, String> {
-    let config = kobo_daemon::config::KoboConfig::load().map_err(|e| e.to_string())?;
+    let config = mado_daemon::config::KoboConfig::load().map_err(|e| e.to_string())?;
     Ok(config.setup_complete)
 }
 
@@ -290,7 +290,7 @@ pub async fn save_milestone(
     state: State<'_, DaemonState>,
     session_id: String,
     message: String,
-) -> Result<kobo_core::types::Milestone, String> {
+) -> Result<mado_core::types::Milestone, String> {
     let guard = state.client.read().await;
     let client = guard
         .as_ref()
@@ -308,7 +308,7 @@ pub async fn list_milestones(
     state: State<'_, DaemonState>,
     session_id: String,
     limit: Option<usize>,
-) -> Result<Vec<kobo_core::types::Milestone>, String> {
+) -> Result<Vec<mado_core::types::Milestone>, String> {
     let guard = state.client.read().await;
     let client = guard
         .as_ref()
@@ -327,7 +327,7 @@ pub async fn diff_milestones(
     session_id: String,
     from_oid: String,
     to_oid: String,
-) -> Result<kobo_core::types::DiffSummary, String> {
+) -> Result<mado_core::types::DiffSummary, String> {
     let guard = state.client.read().await;
     let client = guard
         .as_ref()
@@ -362,7 +362,7 @@ pub async fn restore_milestone(
 pub async fn workspace_changes(
     state: State<'_, DaemonState>,
     session_id: String,
-) -> Result<kobo_core::types::DiffSummary, String> {
+) -> Result<mado_core::types::DiffSummary, String> {
     let guard = state.client.read().await;
     let client = guard
         .as_ref()
@@ -381,7 +381,7 @@ pub async fn workspace_changes(
 pub async fn git_status(
     state: State<'_, DaemonState>,
     session_id: String,
-) -> Result<kobo_core::types::GitStatus, String> {
+) -> Result<mado_core::types::GitStatus, String> {
     let guard = state.client.read().await;
     let client = guard
         .as_ref()

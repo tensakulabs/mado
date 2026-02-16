@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use tracing;
 
-use kobo_core::types::{Session, SessionId};
+use mado_core::types::{Session, SessionId};
 
 /// Persistent state for the daemon.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -127,7 +127,7 @@ pub enum StateError {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use kobo_core::types::SessionStatus;
+    use mado_core::types::SessionStatus;
     use tempfile::TempDir;
 
     fn make_session(id: &str, name: &str) -> Session {
@@ -141,7 +141,7 @@ mod tests {
             working_dir: None,
             command: None,
             shell_fallback: false,
-            conversation_state: kobo_core::types::ConversationState::Empty,
+            conversation_state: mado_core::types::ConversationState::Empty,
             claude_session_id: None,
             message_count: 0,
             total_usage: None,

@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/kobo-core", "crates/kobo-daemon", "src-tauri"]
+members = ["crates/mado-core", "crates/mado-daemon", "src-tauri"]
 resolver = "2"
 
 [workspace.package]

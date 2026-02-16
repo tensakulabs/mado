@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use kobo_core::client::{default_socket_path, DaemonClient};
+use mado_core::client::{default_socket_path, DaemonClient};
 use tracing;
 
 /// Find the daemon binary path.
@@ -12,7 +12,7 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
     let dev_path = std::env::current_exe()
         .ok()
         .and_then(|exe| exe.parent().map(|p| p.to_path_buf()))
-        .map(|dir| dir.join("kobo-daemon"));
+        .map(|dir| dir.join("mado-daemon"));
 
     if let Some(path) = dev_path {
         if path.exists() {
@@ -27,21 +27,21 @@ fn find_daemon_binary() -> Result<PathBuf, String> {
         .unwrap()
         .to_path_buf();
 
-    let release_path = workspace_root.join("target").join("release").join("kobo-daemon");
+    let release_path = workspace_root.join("target").join("release").join("mado-daemon");
     if release_path.exists() {
         tracing::info!("Found daemon binary (release): {}", release_path.display());
         return Ok(release_path);
     }
 
     // Try debug path as fallback.
-    let debug_path = workspace_root.join("target").join("debug").join("kobo-daemon");
+    let debug_path = workspace_root.join("target").join("debug").join("mado-daemon");
     if debug_path.exists() {
         tracing::info!("Found daemon binary (debug): {}", debug_path.display());
         return Ok(debug_path);
     }
 
     Err(format!(
-        "Could not find kobo-daemon binary. Checked:\n  - {}\n  - {}",
+        "Could not find mado-daemon binary. Checked:\n  - {}\n  - {}",
         release_path.display(),
         debug_path.display()
     ))

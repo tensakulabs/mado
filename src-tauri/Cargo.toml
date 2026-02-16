@@ -1,20 +1,20 @@
 [package]
-name = "kobo-tauri"
+name = "mado-tauri"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Kobo desktop app - Tauri shell connecting to kobo-daemon"
+description = "Kobo desktop app - Tauri shell connecting to mado-daemon"
 
 [lib]
-name = "kobo_tauri_lib"
+name = "mado_tauri_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-kobo-core = { path = "../crates/kobo-core" }
-kobo-daemon = { path = "../crates/kobo-daemon" }
+mado-core = { path = "../crates/mado-core" }
+mado-daemon = { path = "../crates/mado-daemon" }
 tauri = { version = "2", features = ["macos-private-api"] }
 tauri-plugin-shell = "2"
 tauri-plugin-dialog = "2"

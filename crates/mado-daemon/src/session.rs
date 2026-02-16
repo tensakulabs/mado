@@ -5,7 +5,7 @@ use tokio::sync::{broadcast, Mutex};
 use tracing;
 use uuid::Uuid;
 
-use kobo_core::types::{PtySize, Session, SessionId, SessionStatus};
+use mado_core::types::{PtySize, Session, SessionId, SessionStatus};
 
 use crate::process::{ProcessError, SharedProcessManager};
 use crate::state::DaemonState;
@@ -75,7 +75,7 @@ impl SessionManager {
             command: Some(spawn_result.command),
             shell_fallback: spawn_result.shell_fallback,
             // Chat mode fields (initialized to defaults).
-            conversation_state: kobo_core::types::ConversationState::Empty,
+            conversation_state: mado_core::types::ConversationState::Empty,
             claude_session_id: None,
             message_count: 0,
             total_usage: None,

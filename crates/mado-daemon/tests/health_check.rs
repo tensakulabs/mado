@@ -12,8 +12,8 @@ use tokio::net::UnixStream;
 use tokio::sync::Mutex;
 use tokio::time::sleep;
 
-use kobo_core::protocol::DaemonResponse;
-use kobo_daemon::state::DaemonState;
+use mado_core::protocol::DaemonResponse;
+use mado_daemon::state::DaemonState;
 
 /// Create test state for server tests.
 fn create_test_state(tmp_dir: &TempDir) -> (Arc<Mutex<DaemonState>>, PathBuf) {
@@ -74,7 +74,7 @@ async fn test_health_endpoint_returns_valid_status() {
     // Start the server in a background task.
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let server_handle = tokio::spawn(async move {
-        kobo_daemon::server::start_server(
+        mado_daemon::server::start_server(
             socket_path_clone,
             state_path,
             daemon_state,
@@ -129,7 +129,7 @@ async fn test_ping_endpoint_returns_pong() {
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let server_handle = tokio::spawn(async move {
-        kobo_daemon::server::start_server(
+        mado_daemon::server::start_server(
             socket_path_clone,
             state_path,
             daemon_state,
@@ -171,7 +171,7 @@ async fn test_socket_permissions_are_0600() {
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let _server_handle = tokio::spawn(async move {
-        kobo_daemon::server::start_server(
+        mado_daemon::server::start_server(
             socket_path_clone,
             state_path,
             daemon_state,
@@ -214,7 +214,7 @@ async fn test_stale_socket_cleanup() {
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let server_handle = tokio::spawn(async move {
-        kobo_daemon::server::start_server(
+        mado_daemon::server::start_server(
             socket_path_clone,
             state_path,
             daemon_state,
@@ -249,7 +249,7 @@ async fn test_client_health_check() {
 
     let (shutdown_tx, shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let _server_handle = tokio::spawn(async move {
-        kobo_daemon::server::start_server(
+        mado_daemon::server::start_server(
             socket_path_clone,
             state_path,
             daemon_state,
@@ -266,8 +266,8 @@ async fn test_client_health_check() {
         "Socket did not appear in time"
     );
 
-    // Test using the DaemonClient from kobo-core.
-    let client = kobo_core::client::DaemonClient::new(&socket_path);
+    // Test using the DaemonClient from mado-core.
+    let client = mado_core::client::DaemonClient::new(&socket_path);
 
     // connect() should succeed
     client.connect().await.expect("Client connect should succeed");

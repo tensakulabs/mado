@@ -4,10 +4,10 @@ use std::time::Duration;
 use tempfile::TempDir;
 use tokio::time::sleep;
 
-use kobo_core::client::DaemonClient;
-use kobo_daemon::lifecycle::{DaemonConfig, start_with_shutdown};
-use kobo_daemon::pid::PidFile;
-use kobo_daemon::state::DaemonState;
+use mado_core::client::DaemonClient;
+use mado_daemon::lifecycle::{DaemonConfig, start_with_shutdown};
+use mado_daemon::pid::PidFile;
+use mado_daemon::state::DaemonState;
 
 /// Wait for a socket file to appear on disk.
 async fn wait_for_socket(socket_path: &std::path::Path, timeout: Duration) -> bool {
@@ -64,7 +64,7 @@ async fn test_pid_prevents_duplicate_daemon() {
     assert!(result.is_err(), "Should not be able to acquire PID for running daemon");
 
     match result {
-        Err(kobo_daemon::pid::PidError::AlreadyRunning { .. }) => {
+        Err(mado_daemon::pid::PidError::AlreadyRunning { .. }) => {
             // Expected
         }
         other => panic!("Expected AlreadyRunning error, got: {:?}", other),
@@ -155,17 +155,17 @@ fn test_state_persistence_save_and_load() {
     let state_path = tmp.path().join("state.json");
 
     let mut state = DaemonState::new();
-    state.add_session(kobo_core::types::Session {
-        id: kobo_core::types::SessionId::new("test-1"),
+    state.add_session(mado_core::types::Session {
+        id: mado_core::types::SessionId::new("test-1"),
         name: "Test Session".to_string(),
         model: "sonnet".to_string(),
-        status: kobo_core::types::SessionStatus::Active,
+        status: mado_core::types::SessionStatus::Active,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
         working_dir: None,
         command: None,
         shell_fallback: false,
-        conversation_state: kobo_core::types::ConversationState::Empty,
+        conversation_state: mado_core::types::ConversationState::Empty,
         claude_session_id: None,
         message_count: 0,
         total_usage: None,

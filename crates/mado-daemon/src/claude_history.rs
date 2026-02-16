@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use serde_json::Value;
 
-use kobo_core::types::{Message, MessageRole, ToolCall, ToolCallStatus};
+use mado_core::types::{Message, MessageRole, ToolCall, ToolCallStatus};
 
 /// A parsed Claude CLI session entry.
 #[derive(Debug, Deserialize)]

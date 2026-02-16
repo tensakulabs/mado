@@ -18,8 +18,8 @@ use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use tracing;
 
-use kobo_core::protocol::DaemonResponse;
-use kobo_core::types::{DaemonStatus, PtySize, SessionId};
+use mado_core::protocol::DaemonResponse;
+use mado_core::types::{DaemonStatus, PtySize, SessionId};
 
 use crate::conversation::{ConversationManager, SharedConversationManager};
 use crate::process::new_shared_process_manager;
@@ -546,7 +546,7 @@ async fn save_milestone_handler(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<SaveMilestoneBody>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     // Get session's working directory.
     let session = state.session_manager.get_session(&session_id).await;
@@ -576,7 +576,7 @@ async fn save_milestone_handler(
 
     match crate::git_ops::save_milestone(path, &body.message) {
         Ok(milestone) => {
-            let core_milestone = kobo_core::types::Milestone {
+            let core_milestone = mado_core::types::Milestone {
                 oid: milestone.oid,
                 message: milestone.message,
                 timestamp: milestone.timestamp,
@@ -599,7 +599,7 @@ async fn list_milestones_handler(
     AxumPath(id): AxumPath<String>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
     let limit = params
         .get("limit")
         .and_then(|l| l.parse().ok())
@@ -625,9 +625,9 @@ async fn list_milestones_handler(
 
     match crate::git_ops::list_milestones(path, limit) {
         Ok(milestones) => {
-            let core_milestones: Vec<kobo_core::types::Milestone> = milestones
+            let core_milestones: Vec<mado_core::types::Milestone> = milestones
                 .into_iter()
-                .map(|m| kobo_core::types::Milestone {
+                .map(|m| mado_core::types::Milestone {
                     oid: m.oid,
                     message: m.message,
                     timestamp: m.timestamp,
@@ -651,7 +651,7 @@ async fn diff_milestones_handler(
     AxumPath(id): AxumPath<String>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let from_oid = match params.get("from") {
         Some(f) => f.clone(),
@@ -690,11 +690,11 @@ async fn diff_milestones_handler(
 
     match crate::git_ops::diff_milestones(path, &from_oid, &to_oid) {
         Ok(diff) => {
-            let core_diff = kobo_core::types::DiffSummary {
+            let core_diff = mado_core::types::DiffSummary {
                 files: diff
                     .files
                     .into_iter()
-                    .map(|f| kobo_core::types::FileDiff {
+                    .map(|f| mado_core::types::FileDiff {
                         path: f.path,
                         insertions: f.insertions,
                         deletions: f.deletions,
@@ -717,7 +717,7 @@ async fn restore_milestone_handler(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<RestoreMilestoneBody>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let session = state.session_manager.get_session(&session_id).await;
     let working_dir = match session {
@@ -751,7 +751,7 @@ async fn workspace_changes_handler(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let session = state.session_manager.get_session(&session_id).await;
     let working_dir = match session {
@@ -780,11 +780,11 @@ async fn workspace_changes_handler(
 
     match crate::git_ops::workspace_changes(path) {
         Ok(diff) => {
-            let core_diff = kobo_core::types::DiffSummary {
+            let core_diff = mado_core::types::DiffSummary {
                 files: diff
                     .files
                     .into_iter()
-                    .map(|f| kobo_core::types::FileDiff {
+                    .map(|f| mado_core::types::FileDiff {
                         path: f.path,
                         insertions: f.insertions,
                         deletions: f.deletions,
@@ -808,7 +808,7 @@ async fn git_status_handler(
     State(state): State<AppState>,
     AxumPath(id): AxumPath<String>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let session = state.session_manager.get_session(&session_id).await;
     let working_dir = match session {
@@ -837,11 +837,11 @@ async fn git_status_handler(
 
     match crate::git_ops::git_status(path) {
         Ok(status) => {
-            let core_status = kobo_core::types::GitStatus {
+            let core_status = mado_core::types::GitStatus {
                 staged: status
                     .staged
                     .into_iter()
-                    .map(|f| kobo_core::types::FileDiff {
+                    .map(|f| mado_core::types::FileDiff {
                         path: f.path,
                         insertions: f.insertions,
                         deletions: f.deletions,
@@ -851,7 +851,7 @@ async fn git_status_handler(
                 unstaged: status
                     .unstaged
                     .into_iter()
-                    .map(|f| kobo_core::types::FileDiff {
+                    .map(|f| mado_core::types::FileDiff {
                         path: f.path,
                         insertions: f.insertions,
                         deletions: f.deletions,
@@ -874,7 +874,7 @@ async fn git_file_diff_handler(
     AxumPath(id): AxumPath<String>,
     axum::extract::Query(params): axum::extract::Query<FileDiffQuery>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let session = state.session_manager.get_session(&session_id).await;
     let working_dir = match session {
@@ -908,7 +908,7 @@ async fn git_stage_file_handler(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<StageFileBody>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let session = state.session_manager.get_session(&session_id).await;
     let working_dir = match session {
@@ -948,7 +948,7 @@ async fn git_unstage_file_handler(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<StageFileBody>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let session = state.session_manager.get_session(&session_id).await;
     let working_dir = match session {
@@ -981,7 +981,7 @@ async fn git_stage_files_handler(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<StageFilesBody>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let session = state.session_manager.get_session(&session_id).await;
     let working_dir = match session {
@@ -1021,7 +1021,7 @@ async fn git_unstage_files_handler(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<StageFilesBody>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let session = state.session_manager.get_session(&session_id).await;
     let working_dir = match session {
@@ -1054,7 +1054,7 @@ async fn git_stage_hunk_handler(
     AxumPath(id): AxumPath<String>,
     Json(body): Json<StageHunkBody>,
 ) -> Json<DaemonResponse> {
-    let session_id = kobo_core::types::SessionId::new(id);
+    let session_id = mado_core::types::SessionId::new(id);
 
     let session = state.session_manager.get_session(&session_id).await;
     let working_dir = match session {
