@@ -60,7 +60,18 @@ export const useSessionStore = create<SessionState & SessionActions>()(
       cols: number,
       cwd?: string,
     ) => {
-      const session = await ipcCreateSession(name, model, rows, cols, cwd);
+      // Deduplicate session names: if "name" already exists, append (2), (3), etc.
+      const existingNames = new Set(get().sessions.map((s) => s.name));
+      let dedupedName = name;
+      if (existingNames.has(dedupedName)) {
+        let counter = 2;
+        while (existingNames.has(`${name} (${counter})`)) {
+          counter++;
+        }
+        dedupedName = `${name} (${counter})`;
+      }
+
+      const session = await ipcCreateSession(dedupedName, model, rows, cols, cwd);
       set((state) => ({
         sessions: [...state.sessions, session],
       }));
