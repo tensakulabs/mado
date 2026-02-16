@@ -19,6 +19,7 @@ import { Layout } from "./components/Layout";
 import { SessionSidebar } from "./components/SessionSidebar";
 import { Toolbar } from "./components/Toolbar";
 import { useKeyboard } from "./hooks/useKeyboard";
+import { useResizableSidebar } from "./hooks/useResizableSidebar";
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
 
@@ -81,6 +82,8 @@ function App() {
   const initSinglePane = usePaneStore((s) => s.initSinglePane);
   const fetchSessions = useSessionStore((s) => s.fetchSessions);
   const loadUiConfig = useUiStore((s) => s.loadFromConfig);
+
+  const { width: sidebarWidth, handleMouseDown: onResizeMouseDown, isResizing } = useResizableSidebar();
 
   // Activate keyboard shortcuts with command palette integration.
   useKeyboard({
@@ -225,7 +228,19 @@ function App() {
           </div>
         )}
         <div className="flex flex-1 min-h-0">
-          <SessionSidebar />
+          <div
+            className="relative flex-shrink-0"
+            style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}
+          >
+            <SessionSidebar />
+            {/* Resize drag handle */}
+            <div
+              onMouseDown={onResizeMouseDown}
+              className={`absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 transition-colors ${
+                isResizing ? "bg-blue-500/50" : "hover:bg-blue-500/30"
+              }`}
+            />
+          </div>
           <div className="flex-1 min-h-0">
             <Layout />
           </div>
