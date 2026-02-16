@@ -14,13 +14,14 @@ interface CommandAction {
 interface CommandPaletteProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenSettings: () => void;
 }
 
 /**
  * Command palette component (Cmd+K).
  * Provides fuzzy-searchable access to all app actions.
  */
-export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
+export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPaletteProps) {
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -186,6 +187,15 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         category: "Model",
         action: () => setDefaultModel("haiku"),
       },
+
+      // Settings
+      {
+        id: "settings",
+        label: "Settings",
+        description: "Open settings panel",
+        category: "App",
+        action: () => onOpenSettings(),
+      },
     ];
 
     return cmds;
@@ -201,6 +211,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     initSinglePane,
     setDefaultModel,
     root,
+    onOpenSettings,
   ]);
 
   // Fuzzy search.
@@ -311,10 +322,10 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
       />
 
       {/* Palette */}
-      <div className="relative w-full max-w-lg rounded-xl border border-gray-700/50 bg-[#0f1629] shadow-2xl">
+      <div className="relative w-full max-w-lg rounded-xl border border-theme-primary bg-theme-secondary shadow-2xl">
         {/* Input */}
-        <div className="flex items-center border-b border-gray-700/50 px-4 py-3">
-          <span className="mr-2 text-gray-500">{">"}</span>
+        <div className="flex items-center border-b border-theme-primary px-4 py-3">
+          <span className="mr-2 text-theme-muted">{">"}</span>
           <input
             ref={inputRef}
             type="text"
@@ -322,11 +333,11 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Type a command..."
-            className="flex-1 bg-transparent text-sm text-gray-200 placeholder-gray-600 outline-none"
+            className="flex-1 bg-transparent text-sm text-theme-primary placeholder:text-theme-muted outline-none"
             autoComplete="off"
             spellCheck={false}
           />
-          <kbd className="ml-2 rounded border border-gray-700 bg-gray-800/50 px-1.5 py-0.5 text-[10px] text-gray-500">
+          <kbd className="ml-2 rounded border border-theme-primary bg-theme-tertiary px-1.5 py-0.5 text-[10px] text-theme-muted">
             esc
           </kbd>
         </div>
@@ -334,14 +345,14 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         {/* Results */}
         <div ref={listRef} className="max-h-64 overflow-y-auto py-1">
           {filteredCommands.length === 0 && (
-            <div className="px-4 py-3 text-center text-sm text-gray-500">
+            <div className="px-4 py-3 text-center text-sm text-theme-muted">
               No matching commands
             </div>
           )}
 
           {Object.entries(groupedCommands).map(([category, cmds]) => (
             <div key={category}>
-              <div className="px-4 py-1 text-[10px] font-medium uppercase tracking-wider text-gray-600">
+              <div className="px-4 py-1 text-[10px] font-medium uppercase tracking-wider text-theme-muted">
                 {category}
               </div>
               {cmds.map((cmd) => {
@@ -357,20 +368,20 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                     onMouseEnter={() => setSelectedIndex(index)}
                     className={`flex w-full items-center justify-between px-4 py-1.5 text-left text-sm ${
                       isSelected
-                        ? "bg-blue-900/30 text-gray-200"
-                        : "text-gray-400 hover:bg-gray-800/50"
+                        ? "bg-blue-900/30 text-theme-primary"
+                        : "text-theme-secondary hover:bg-theme-tertiary"
                     }`}
                   >
                     <div>
                       <span className="font-medium">{cmd.label}</span>
                       {cmd.description && (
-                        <span className="ml-2 text-xs text-gray-600">
+                        <span className="ml-2 text-xs text-theme-muted">
                           {cmd.description}
                         </span>
                       )}
                     </div>
                     {cmd.shortcut && (
-                      <kbd className="ml-4 text-[10px] text-gray-600">
+                      <kbd className="ml-4 text-[10px] text-theme-muted">
                         {cmd.shortcut}
                       </kbd>
                     )}

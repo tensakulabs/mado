@@ -19,7 +19,7 @@ use tokio_stream::StreamExt;
 use tracing;
 
 use kobo_core::protocol::DaemonResponse;
-use kobo_core::types::{DaemonStatus, PtySize, SessionId, StreamEvent};
+use kobo_core::types::{DaemonStatus, PtySize, SessionId};
 
 use crate::conversation::{ConversationManager, SharedConversationManager};
 use crate::process::new_shared_process_manager;
@@ -45,6 +45,9 @@ pub struct CreateSessionBody {
     pub rows: Option<u16>,
     #[serde(default)]
     pub cols: Option<u16>,
+    /// Working directory for the session.
+    #[serde(default)]
+    pub cwd: Option<String>,
 }
 
 fn default_model() -> String {
@@ -77,6 +80,33 @@ pub struct RestoreMilestoneBody {
     pub oid: String,
 }
 
+/// Request body for staging/unstaging a file.
+#[derive(Debug, Deserialize)]
+pub struct StageFileBody {
+    pub file_path: String,
+}
+
+/// Request body for batch staging/unstaging multiple files.
+#[derive(Debug, Deserialize)]
+pub struct StageFilesBody {
+    pub file_paths: Vec<String>,
+}
+
+/// Request body for staging a single hunk.
+#[derive(Debug, Deserialize)]
+pub struct StageHunkBody {
+    pub file_path: String,
+    pub hunk_index: usize,
+}
+
+/// Query params for file diff.
+#[derive(Debug, Deserialize)]
+pub struct FileDiffQuery {
+    pub file_path: String,
+    #[serde(default)]
+    pub staged: Option<bool>,
+}
+
 /// Request body for sending a message (chat mode).
 #[derive(Debug, Deserialize)]
 pub struct SendMessageBody {
@@ -97,6 +127,8 @@ pub struct GetMessagesQuery {
 /// Start the daemon's HTTP server on a Unix domain socket.
 pub async fn start_server(
     socket_path: PathBuf,
+    state_path: PathBuf,
+    daemon_state: Arc<Mutex<DaemonState>>,
     shutdown_signal: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<(), ServerError> {
     // Ensure parent directory exists with 0700 permissions.
@@ -121,7 +153,7 @@ pub async fn start_server(
 
     tracing::info!("Daemon listening on {}", socket_path.display());
 
-    let state = create_app_state();
+    let state = create_app_state(daemon_state, state_path);
     let app = create_router(state);
 
     // Serve with graceful shutdown.
@@ -140,16 +172,15 @@ pub async fn start_server(
 }
 
 /// Create the shared app state with session and process managers.
-fn create_app_state() -> AppState {
-    let daemon_state = Arc::new(Mutex::new(DaemonState::default()));
+fn create_app_state(daemon_state: Arc<Mutex<DaemonState>>, state_path: PathBuf) -> AppState {
     let process_manager = new_shared_process_manager();
-    let session_manager = Arc::new(SessionManager::new(daemon_state, process_manager));
+    let session_manager = Arc::new(SessionManager::new(daemon_state.clone(), process_manager));
 
     // Create conversation manager with storage in ~/.kobo/conversations/.
     let storage_dir = dirs::home_dir()
         .map(|h| h.join(".kobo").join("conversations"))
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp/kobo/conversations"));
-    let conversation_manager = Arc::new(ConversationManager::new(storage_dir));
+    let conversation_manager = Arc::new(ConversationManager::new(storage_dir, daemon_state, state_path));
 
     AppState {
         start_time: Instant::now(),
@@ -176,6 +207,7 @@ fn create_router(state: AppState) -> Router {
         .route("/sessions/{id}/messages", get(get_messages_handler).post(send_message_handler))
         .route("/sessions/{id}/messages/current", axum::routing::delete(cancel_response_handler))
         .route("/sessions/{id}/stream", get(stream_events_handler))
+        .route("/sessions/{id}/history", get(import_history_handler))
         // Versioning.
         .route("/sessions/{id}/save", post(save_milestone_handler))
         .route("/sessions/{id}/milestones", get(list_milestones_handler))
@@ -183,6 +215,14 @@ fn create_router(state: AppState) -> Router {
         .route("/sessions/{id}/restore", post(restore_milestone_handler))
         // Change indicators.
         .route("/sessions/{id}/changes", get(workspace_changes_handler))
+        // Git staging operations.
+        .route("/sessions/{id}/git/status", get(git_status_handler))
+        .route("/sessions/{id}/git/diff", get(git_file_diff_handler))
+        .route("/sessions/{id}/git/stage", post(git_stage_file_handler))
+        .route("/sessions/{id}/git/unstage", post(git_unstage_file_handler))
+        .route("/sessions/{id}/git/stage-files", post(git_stage_files_handler))
+        .route("/sessions/{id}/git/unstage-files", post(git_unstage_files_handler))
+        .route("/sessions/{id}/git/stage-hunk", post(git_stage_hunk_handler))
         .with_state(state)
 }
 
@@ -224,7 +264,7 @@ async fn create_session_handler(
 
     match state
         .session_manager
-        .create_session(body.name, body.model, pty_size, None)
+        .create_session(body.name, body.model, pty_size, body.cwd)
         .await
     {
         Ok(session) => Json(DaemonResponse::SessionCreated { session }),
@@ -358,9 +398,10 @@ async fn send_message_handler(
     // Ensure conversation is initialized for this session.
     let session = state.session_manager.get_session(&session_id).await;
     if let Some(ref s) = session {
+        // Pass the stored claude_session_id so conversations can be resumed.
         state
             .conversation_manager
-            .init_session(&session_id, &s.model, s.working_dir.clone())
+            .init_session(&session_id, &s.model, s.working_dir.clone(), s.claude_session_id.clone())
             .await;
     } else {
         return Json(DaemonResponse::Error {
@@ -385,7 +426,21 @@ async fn get_messages_handler(
     AxumPath(id): AxumPath<String>,
     axum::extract::Query(params): axum::extract::Query<GetMessagesQuery>,
 ) -> Json<DaemonResponse> {
-    let session_id = SessionId::new(id);
+    let session_id = SessionId::new(id.clone());
+
+    // Ensure conversation is initialized for this session.
+    let session = state.session_manager.get_session(&session_id).await;
+    if let Some(ref s) = session {
+        // Pass the stored claude_session_id so conversations can be resumed.
+        state
+            .conversation_manager
+            .init_session(&session_id, &s.model, s.working_dir.clone(), s.claude_session_id.clone())
+            .await;
+    } else {
+        return Json(DaemonResponse::Error {
+            message: format!("Session not found: {}", id),
+        });
+    }
 
     match state
         .conversation_manager
@@ -435,6 +490,53 @@ async fn stream_events_handler(
     });
 
     Sse::new(Box::pin(started.chain(stream)))
+}
+
+/// Query params for importing history.
+#[derive(Debug, Deserialize)]
+pub struct ImportHistoryQuery {
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub all_sessions: Option<bool>,
+}
+
+async fn import_history_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(params): axum::extract::Query<ImportHistoryQuery>,
+) -> Json<DaemonResponse> {
+    let session_id = SessionId::new(id.clone());
+
+    // Get session's working directory.
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s.working_dir.unwrap_or_else(|| {
+            dirs::home_dir()
+                .map(|h| h.to_string_lossy().to_string())
+                .unwrap_or_else(|| "/tmp".to_string())
+        }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    let result = if params.all_sessions.unwrap_or(false) {
+        crate::claude_history::import_all_history(path, params.limit)
+    } else {
+        crate::claude_history::import_history(path, params.limit)
+    };
+
+    match result {
+        Ok(messages) => Json(DaemonResponse::Messages { messages }),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
 }
 
 // ── Versioning endpoints ──
@@ -694,6 +796,293 @@ async fn workspace_changes_handler(
             };
             Json(DaemonResponse::WorkspaceChanges { changes: core_diff })
         }
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+// ── Git staging endpoints ──
+
+async fn git_status_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    // Ensure git repo exists.
+    if let Err(e) = crate::git_ops::init_repo(path) {
+        return Json(DaemonResponse::Error {
+            message: format!("Failed to init git repo: {}", e),
+        });
+    }
+
+    match crate::git_ops::git_status(path) {
+        Ok(status) => {
+            let core_status = kobo_core::types::GitStatus {
+                staged: status
+                    .staged
+                    .into_iter()
+                    .map(|f| kobo_core::types::FileDiff {
+                        path: f.path,
+                        insertions: f.insertions,
+                        deletions: f.deletions,
+                        status: f.status,
+                    })
+                    .collect(),
+                unstaged: status
+                    .unstaged
+                    .into_iter()
+                    .map(|f| kobo_core::types::FileDiff {
+                        path: f.path,
+                        insertions: f.insertions,
+                        deletions: f.deletions,
+                        status: f.status,
+                    })
+                    .collect(),
+            };
+            Json(DaemonResponse::GitStatusResult {
+                status: core_status,
+            })
+        }
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn git_file_diff_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    axum::extract::Query(params): axum::extract::Query<FileDiffQuery>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+    let is_staged = params.staged.unwrap_or(false);
+
+    match crate::git_ops::git_file_diff(path, &params.file_path, is_staged) {
+        Ok(diff) => Json(DaemonResponse::FileDiffContent { diff }),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn git_stage_file_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<StageFileBody>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    // Ensure git repo exists.
+    if let Err(e) = crate::git_ops::init_repo(path) {
+        return Json(DaemonResponse::Error {
+            message: format!("Failed to init git repo: {}", e),
+        });
+    }
+
+    match crate::git_ops::git_stage_file(path, &body.file_path) {
+        Ok(()) => Json(DaemonResponse::Pong),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn git_unstage_file_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<StageFileBody>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    match crate::git_ops::git_unstage_file(path, &body.file_path) {
+        Ok(()) => Json(DaemonResponse::Pong),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn git_stage_files_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<StageFilesBody>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    // Ensure git repo exists.
+    if let Err(e) = crate::git_ops::init_repo(path) {
+        return Json(DaemonResponse::Error {
+            message: format!("Failed to init git repo: {}", e),
+        });
+    }
+
+    match crate::git_ops::git_stage_files(path, &body.file_paths) {
+        Ok(()) => Json(DaemonResponse::Pong),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn git_unstage_files_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<StageFilesBody>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    match crate::git_ops::git_unstage_files(path, &body.file_paths) {
+        Ok(()) => Json(DaemonResponse::Pong),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn git_stage_hunk_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+    Json(body): Json<StageHunkBody>,
+) -> Json<DaemonResponse> {
+    let session_id = kobo_core::types::SessionId::new(id);
+
+    let session = state.session_manager.get_session(&session_id).await;
+    let working_dir = match session {
+        Some(s) => s
+            .working_dir
+            .unwrap_or_else(|| {
+                dirs::home_dir()
+                    .map(|h| h.to_string_lossy().to_string())
+                    .unwrap_or_else(|| "/tmp".to_string())
+            }),
+        None => {
+            return Json(DaemonResponse::Error {
+                message: format!("Session not found: {}", session_id),
+            });
+        }
+    };
+
+    let path = std::path::Path::new(&working_dir);
+
+    // Ensure git repo exists.
+    if let Err(e) = crate::git_ops::init_repo(path) {
+        return Json(DaemonResponse::Error {
+            message: format!("Failed to init git repo: {}", e),
+        });
+    }
+
+    match crate::git_ops::git_stage_hunk(path, &body.file_path, body.hunk_index) {
+        Ok(()) => Json(DaemonResponse::Pong),
         Err(e) => Json(DaemonResponse::Error {
             message: e.to_string(),
         }),

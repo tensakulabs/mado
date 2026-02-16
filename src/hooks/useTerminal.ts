@@ -38,12 +38,16 @@ export function useTerminal(sessionId: string | null): UseTerminalResult {
     // Wire up input: keystrokes -> daemon.
     const inputDisposable = terminal.onData((data: string) => {
       if (disposed) return;
+      console.log("[Terminal] onData fired, data length:", data.length);
       // Convert string to byte array.
       const encoder = new TextEncoder();
       const bytes = Array.from(encoder.encode(data));
-      writeInput(sessionId, bytes).catch((err) => {
-        console.error("Failed to write input:", err);
-      });
+      console.log("[Terminal] Sending bytes to daemon:", bytes);
+      writeInput(sessionId, bytes)
+        .then(() => console.log("[Terminal] writeInput succeeded"))
+        .catch((err) => {
+          console.error("[Terminal] Failed to write input:", err);
+        });
     });
 
     // Wire up resize: terminal resize -> daemon.

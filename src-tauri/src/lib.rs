@@ -20,8 +20,10 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(DaemonState::new())
         .invoke_handler(tauri::generate_handler![
+            commands::ping,
             commands::health_check,
             commands::daemon_status,
             commands::reconnect,
@@ -35,15 +37,31 @@ pub fn run() {
             commands::has_api_key,
             commands::set_api_key,
             commands::delete_api_key,
+            commands::get_config,
+            commands::update_config,
+            commands::complete_setup,
+            commands::is_setup_complete,
+            commands::check_cli_auth,
+            commands::check_cli_installed,
+            commands::get_user_display_name,
             commands::save_milestone,
             commands::list_milestones,
             commands::diff_milestones,
             commands::restore_milestone,
             commands::workspace_changes,
+            // Git staging commands.
+            commands::git_status,
+            commands::git_file_diff,
+            commands::git_stage_file,
+            commands::git_unstage_file,
+            commands::git_stage_files,
+            commands::git_unstage_files,
+            commands::git_stage_hunk,
             // Chat mode commands.
             commands::send_message,
             commands::get_messages,
             commands::cancel_response,
+            commands::import_history,
             bridge::attach_chat_session,
         ])
         .setup(|app| {
@@ -55,11 +73,9 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 match lifecycle::ensure_daemon().await {
                     Ok(client) => {
-                        tracing::info!("Daemon connected successfully");
-                        let mut guard = client_arc.lock().await;
+                        let mut guard = client_arc.write().await;
                         *guard = Some(client);
-
-                        // Emit success event to frontend.
+                        drop(guard);
                         let _ = app_handle.emit("daemon-connected", "connected");
                     }
                     Err(e) => {

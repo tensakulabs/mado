@@ -20,6 +20,8 @@ use kobo_core::types::{
     ToolCallStatus,
 };
 
+use crate::state::DaemonState;
+
 /// Find the Claude CLI binary on the system.
 fn find_claude_binary() -> Option<PathBuf> {
     // Check PATH first via `which`.
@@ -100,15 +102,21 @@ pub struct ConversationManager {
     event_senders: Arc<RwLock<HashMap<String, broadcast::Sender<StreamEvent>>>>,
     /// Base directory for storing conversations.
     storage_dir: PathBuf,
+    /// Shared daemon state for persisting claude_session_id.
+    daemon_state: Arc<Mutex<DaemonState>>,
+    /// Path to state file for persistence.
+    state_path: PathBuf,
 }
 
 impl ConversationManager {
-    pub fn new(storage_dir: PathBuf) -> Self {
+    pub fn new(storage_dir: PathBuf, daemon_state: Arc<Mutex<DaemonState>>, state_path: PathBuf) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
             active_processes: Arc::new(Mutex::new(HashMap::new())),
             event_senders: Arc::new(RwLock::new(HashMap::new())),
             storage_dir,
+            daemon_state,
+            state_path,
         }
     }
 
@@ -118,6 +126,7 @@ impl ConversationManager {
         session_id: &SessionId,
         model: &str,
         working_dir: Option<String>,
+        claude_session_id: Option<String>,
     ) -> ConversationSession {
         let mut sessions = self.sessions.write().await;
         if let Some(session) = sessions.get(session_id.as_str()) {
@@ -126,6 +135,7 @@ impl ConversationManager {
             let session = ConversationSession {
                 model: model.to_string(),
                 working_dir,
+                claude_session_id,
                 ..Default::default()
             };
             sessions.insert(session_id.as_str().to_string(), session.clone());
@@ -135,10 +145,13 @@ impl ConversationManager {
 
     /// Get a broadcast receiver for a session's events.
     pub async fn subscribe(&self, session_id: &SessionId) -> broadcast::Receiver<StreamEvent> {
+        tracing::info!("SSE subscribe requested for session {}", session_id);
         let mut senders = self.event_senders.write().await;
         if let Some(tx) = senders.get(session_id.as_str()) {
+            tracing::info!("SSE subscribe: reusing existing channel for session {}", session_id);
             tx.subscribe()
         } else {
+            tracing::info!("SSE subscribe: creating new channel for session {}", session_id);
             let (tx, rx) = broadcast::channel(256);
             senders.insert(session_id.as_str().to_string(), tx);
             rx
@@ -149,8 +162,10 @@ impl ConversationManager {
     async fn get_sender(&self, session_id: &SessionId) -> broadcast::Sender<StreamEvent> {
         let mut senders = self.event_senders.write().await;
         if let Some(tx) = senders.get(session_id.as_str()) {
+            tracing::info!("get_sender: reusing existing channel for session {} (receivers: {})", session_id, tx.receiver_count());
             tx.clone()
         } else {
+            tracing::warn!("get_sender: creating NEW channel for session {} (no SSE subscriber yet!)", session_id);
             let (tx, _) = broadcast::channel(256);
             senders.insert(session_id.as_str().to_string(), tx.clone());
             tx
@@ -164,15 +179,24 @@ impl ConversationManager {
         content: String,
         model_override: Option<String>,
     ) -> Result<String, ConversationError> {
+        tracing::info!("send_message called for session {}, content length: {}", session_id, content.len());
+
         // Ensure we have a session.
         let session = {
             let sessions = self.sessions.read().await;
             sessions.get(session_id.as_str()).cloned()
         };
 
-        let session = session.ok_or_else(|| {
-            ConversationError::SessionNotFound(session_id.as_str().to_string())
-        })?;
+        let session = match session {
+            Some(s) => {
+                tracing::info!("Found session {} with model={}, working_dir={:?}", session_id, s.model, s.working_dir);
+                s
+            }
+            None => {
+                tracing::error!("Session {} not found in conversation manager!", session_id);
+                return Err(ConversationError::SessionNotFound(session_id.as_str().to_string()));
+            }
+        };
 
         let model = model_override.unwrap_or(session.model.clone());
 
@@ -198,7 +222,11 @@ impl ConversationManager {
         }
 
         // Find Claude CLI.
-        let claude_path = find_claude_binary().ok_or(ConversationError::ClaudeNotFound)?;
+        let claude_path = find_claude_binary().ok_or_else(|| {
+            tracing::error!("Claude CLI not found!");
+            ConversationError::ClaudeNotFound
+        })?;
+        tracing::info!("Found Claude CLI at: {:?}", claude_path);
 
         // Build command.
         let mut cmd = Command::new(&claude_path);
@@ -206,6 +234,11 @@ impl ConversationManager {
         cmd.arg("--output-format").arg("stream-json");
         cmd.arg("--verbose");
         cmd.arg("--model").arg(&model);
+
+        // CRITICAL: Remove CLAUDECODE env var to prevent "nested sessions" error.
+        // This allows kobo-daemon to spawn Claude CLI even when running in a
+        // terminal that's inside another Claude Code session.
+        cmd.env_remove("CLAUDECODE");
 
         // Add --resume if we have a Claude session ID.
         if let Some(ref claude_sid) = session.claude_session_id {
@@ -220,10 +253,16 @@ impl ConversationManager {
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
 
+        tracing::info!("Spawning Claude CLI: {:?}", cmd);
+
         // Spawn the process.
         let mut child = cmd
             .spawn()
-            .map_err(|e| ConversationError::SpawnFailed(e.to_string()))?;
+            .map_err(|e| {
+                tracing::error!("Failed to spawn Claude CLI: {}", e);
+                ConversationError::SpawnFailed(e.to_string())
+            })?;
+        tracing::info!("Spawned Claude CLI process with PID: {:?}", child.id());
 
         let stdout = child.stdout.take().ok_or_else(|| {
             ConversationError::SpawnFailed("Failed to capture stdout".to_string())
@@ -240,6 +279,8 @@ impl ConversationManager {
         let session_id_clone = session_id.clone();
         let sessions_ref = self.sessions.clone();
         let active_ref = self.active_processes.clone();
+        let daemon_state_ref = self.daemon_state.clone();
+        let state_path_ref = self.state_path.clone();
 
         // Spawn reader task.
         tokio::task::spawn_blocking(move || {
@@ -254,7 +295,7 @@ impl ConversationManager {
                 let line = match line {
                     Ok(l) => l,
                     Err(e) => {
-                        tracing::error!("Failed to read line: {}", e);
+                        tracing::error!("Failed to read line from Claude CLI: {}", e);
                         break;
                     }
                 };
@@ -273,6 +314,7 @@ impl ConversationManager {
                 };
 
                 let event_type = event["type"].as_str().unwrap_or("");
+                tracing::info!("Claude event: type={}", event_type);
 
                 match event_type {
                     "assistant" => {
@@ -339,6 +381,7 @@ impl ConversationManager {
                     }
                     "result" => {
                         // Final result with metadata.
+                        tracing::info!("Result event: {:?}", event);
                         final_claude_sid = event
                             .get("session_id")
                             .and_then(|s| s.as_str())
@@ -346,6 +389,7 @@ impl ConversationManager {
                         final_cost = event.get("cost_usd").and_then(|c| c.as_f64());
 
                         if let Some(usage) = event.get("usage") {
+                            tracing::info!("Usage found: {:?}", usage);
                             final_usage = Some(TokenUsage {
                                 input_tokens: usage
                                     .get("input_tokens")
@@ -406,8 +450,8 @@ impl ConversationManager {
                     }
 
                     // Update session metadata.
-                    if let Some(sid) = final_claude_sid {
-                        s.claude_session_id = Some(sid);
+                    if let Some(ref sid) = final_claude_sid {
+                        s.claude_session_id = Some(sid.clone());
                     }
                     if let Some(usage) = final_usage {
                         s.total_usage.input_tokens += usage.input_tokens;
@@ -417,6 +461,21 @@ impl ConversationManager {
                         s.total_cost_usd += cost;
                     }
                     s.state = ConversationState::Idle;
+                }
+
+                // Persist claude_session_id to DaemonState so it survives restarts.
+                if let Some(ref sid) = final_claude_sid {
+                    let mut daemon_state = daemon_state_ref.lock().await;
+                    if let Some(session) = daemon_state.sessions.get_mut(session_id_clone.as_str()) {
+                        session.claude_session_id = Some(sid.clone());
+                        session.updated_at = Utc::now();
+                        // Save state to disk.
+                        if let Err(e) = daemon_state.save(&state_path_ref) {
+                            tracing::error!("Failed to persist daemon state: {}", e);
+                        } else {
+                            tracing::debug!("Persisted claude_session_id {} for session {}", sid, session_id_clone);
+                        }
+                    }
                 }
 
                 // Remove from active processes.
@@ -491,21 +550,24 @@ impl ConversationManager {
     }
 
     /// Initialize a session (called when creating a new session).
+    /// Only creates a new session if one doesn't already exist.
+    /// If `claude_session_id` is provided, it will be used for resuming conversations.
     pub async fn init_session(
         &self,
         session_id: &SessionId,
         model: &str,
         working_dir: Option<String>,
+        claude_session_id: Option<String>,
     ) {
         let mut sessions = self.sessions.write().await;
-        sessions.insert(
-            session_id.as_str().to_string(),
+        sessions.entry(session_id.as_str().to_string()).or_insert_with(|| {
             ConversationSession {
                 model: model.to_string(),
                 working_dir,
+                claude_session_id,
                 ..Default::default()
-            },
-        );
+            }
+        });
     }
 
     /// Remove a session.

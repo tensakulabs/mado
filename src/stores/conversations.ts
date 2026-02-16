@@ -5,10 +5,11 @@ import {
   getMessages as ipcGetMessages,
   sendMessage as ipcSendMessage,
   cancelResponse as ipcCancelResponse,
+  importHistory as ipcImportHistory,
   attachChatSession,
 } from "../lib/ipc";
 
-type ConversationState = "empty" | "idle" | "streaming" | "error";
+type ConversationState = "loading" | "empty" | "idle" | "streaming" | "error";
 
 interface PerSessionState {
   messages: Message[];
@@ -30,6 +31,9 @@ interface ConversationStoreActions {
   // Load messages from daemon.
   loadMessages: (sessionId: string) => Promise<void>;
 
+  // Load Claude CLI history for the session's working directory.
+  loadHistory: (sessionId: string, limit?: number) => Promise<void>;
+
   // Send a message.
   sendMessage: (sessionId: string, content: string, model?: string) => Promise<void>;
 
@@ -49,22 +53,25 @@ interface ConversationStoreActions {
   getSessionState: (sessionId: string) => PerSessionState | undefined;
 
   // Get messages for a session.
-  getMessages: (sessionId: string) => Message[];
+  getMessages: (sessionId: string | null) => Message[];
 
   // Get streaming text for a session.
-  getStreamingText: (sessionId: string) => string;
+  getStreamingText: (sessionId: string | null) => string;
 
   // Get conversation state.
-  getState: (sessionId: string) => ConversationState;
+  getState: (sessionId: string | null) => ConversationState;
 }
 
 const defaultSessionState = (): PerSessionState => ({
   messages: [],
   streamingText: "",
   streamingToolCalls: new Map(),
-  state: "empty",
+  state: "loading",
   error: null,
 });
+
+// Stable empty array to avoid infinite render loops.
+const EMPTY_MESSAGES: Message[] = [];
 
 export const useConversationStore = create<
   ConversationStoreState & ConversationStoreActions
@@ -112,6 +119,34 @@ export const useConversationStore = create<
     }
   },
 
+  loadHistory: async (sessionId: string, limit?: number) => {
+    get().initSession(sessionId);
+
+    try {
+      const history = await ipcImportHistory(sessionId, limit);
+      if (history.length > 0) {
+        set((state) => {
+          const newSessions = new Map(state.sessions);
+          const session = newSessions.get(sessionId) || defaultSessionState();
+          // Prepend history to existing messages (history comes first).
+          const existingMessages = session.messages;
+          const existingIds = new Set(existingMessages.map((m) => m.id));
+          // Filter out duplicates.
+          const newHistory = history.filter((m) => !existingIds.has(m.id));
+          newSessions.set(sessionId, {
+            ...session,
+            messages: [...newHistory, ...existingMessages],
+            state: existingMessages.length > 0 || newHistory.length > 0 ? "idle" : "empty",
+          });
+          return { sessions: newSessions };
+        });
+      }
+    } catch (err) {
+      // Don't set error state for history import - it's optional.
+      console.warn("Failed to load history:", err);
+    }
+  },
+
   sendMessage: async (sessionId: string, content: string, model?: string) => {
     get().initSession(sessionId);
 
@@ -139,8 +174,21 @@ export const useConversationStore = create<
     });
 
     // Subscribe to stream events if not already.
+    // We need to ensure the SSE connection is established before sending,
+    // otherwise events could be sent before we're subscribed.
     if (!get().activeChannels.has(sessionId)) {
       get().subscribeToStream(sessionId);
+    }
+
+    // Wait for SSE connection to be ready (give it time to connect).
+    // The channel promise resolves when the connection is established.
+    const channelInfo = get().activeChannels.get(sessionId);
+    if (channelInfo?.promise) {
+      // Wait briefly for SSE to connect (races with daemon processing).
+      await Promise.race([
+        new Promise<void>((resolve) => setTimeout(resolve, 100)),
+        channelInfo.promise.catch(() => {}), // Ignore errors in race
+      ]);
     }
 
     try {
@@ -283,15 +331,19 @@ export const useConversationStore = create<
     return get().sessions.get(sessionId);
   },
 
-  getMessages: (sessionId: string) => {
-    return get().sessions.get(sessionId)?.messages || [];
+  getMessages: (sessionId: string | null) => {
+    if (!sessionId) return EMPTY_MESSAGES;
+    return get().sessions.get(sessionId)?.messages ?? EMPTY_MESSAGES;
   },
 
-  getStreamingText: (sessionId: string) => {
-    return get().sessions.get(sessionId)?.streamingText || "";
+  getStreamingText: (sessionId: string | null) => {
+    if (!sessionId) return "";
+    return get().sessions.get(sessionId)?.streamingText ?? "";
   },
 
-  getState: (sessionId: string) => {
-    return get().sessions.get(sessionId)?.state || "empty";
+  getState: (sessionId: string | null) => {
+    if (!sessionId) return "empty";
+    // Return "loading" if session doesn't exist yet (will be initialized soon)
+    return get().sessions.get(sessionId)?.state ?? "loading";
   },
 }));

@@ -345,6 +345,417 @@ pub fn workspace_changes(path: &Path) -> Result<DiffSummary, GitError> {
     })
 }
 
+/// Git staging status: staged and unstaged files separately.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitStatus {
+    pub staged: Vec<FileDiff>,
+    pub unstaged: Vec<FileDiff>,
+}
+
+/// Get the staging status of a repository, separating staged and unstaged files.
+pub fn git_status(path: &Path) -> Result<GitStatus, GitError> {
+    let repo = Repository::open(path)?;
+
+    let mut status_opts = StatusOptions::new();
+    status_opts
+        .include_untracked(true)
+        .recurse_untracked_dirs(true);
+
+    let statuses = repo.statuses(Some(&mut status_opts))?;
+
+    let mut staged = Vec::new();
+    let mut unstaged = Vec::new();
+
+    for entry in statuses.iter() {
+        let file_path = entry.path().unwrap_or("(unknown)").to_string();
+        let s = entry.status();
+
+        // Staged changes (index vs HEAD).
+        if s.intersects(
+            git2::Status::INDEX_NEW
+                | git2::Status::INDEX_MODIFIED
+                | git2::Status::INDEX_DELETED
+                | git2::Status::INDEX_RENAMED
+                | git2::Status::INDEX_TYPECHANGE,
+        ) {
+            let status = if s.contains(git2::Status::INDEX_NEW) {
+                "added"
+            } else if s.contains(git2::Status::INDEX_MODIFIED) {
+                "modified"
+            } else if s.contains(git2::Status::INDEX_DELETED) {
+                "deleted"
+            } else if s.contains(git2::Status::INDEX_RENAMED) {
+                "renamed"
+            } else {
+                "modified"
+            };
+
+            staged.push(FileDiff {
+                path: file_path.clone(),
+                insertions: 0,
+                deletions: 0,
+                status: status.to_string(),
+            });
+        }
+
+        // Unstaged changes (workdir vs index).
+        if s.intersects(
+            git2::Status::WT_MODIFIED
+                | git2::Status::WT_DELETED
+                | git2::Status::WT_RENAMED
+                | git2::Status::WT_TYPECHANGE
+                | git2::Status::WT_NEW,
+        ) {
+            let status = if s.contains(git2::Status::WT_NEW) {
+                "added"
+            } else if s.contains(git2::Status::WT_MODIFIED) {
+                "modified"
+            } else if s.contains(git2::Status::WT_DELETED) {
+                "deleted"
+            } else if s.contains(git2::Status::WT_RENAMED) {
+                "renamed"
+            } else {
+                "modified"
+            };
+
+            unstaged.push(FileDiff {
+                path: file_path,
+                insertions: 0,
+                deletions: 0,
+                status: status.to_string(),
+            });
+        }
+    }
+
+    // Populate line stats for staged files (index vs HEAD).
+    if !staged.is_empty() {
+        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+        let mut diff_opts = DiffOptions::new();
+        let diff = repo.diff_tree_to_index(
+            head_tree.as_ref(),
+            Some(&repo.index()?),
+            Some(&mut diff_opts),
+        )?;
+
+        let mut staged_stats: std::collections::HashMap<String, (usize, usize)> =
+            std::collections::HashMap::new();
+        for i in 0..diff.deltas().len() {
+            let delta = diff.get_delta(i).unwrap();
+            let dp = delta
+                .new_file()
+                .path()
+                .or_else(|| delta.old_file().path())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, i) {
+                let (_, additions, deletions) = patch.line_stats().unwrap_or((0, 0, 0));
+                staged_stats.insert(dp, (additions, deletions));
+            }
+        }
+
+        for file in staged.iter_mut() {
+            if let Some((ins, del)) = staged_stats.get(&file.path) {
+                file.insertions = *ins;
+                file.deletions = *del;
+            }
+        }
+    }
+
+    // Populate line stats for unstaged files (workdir vs index).
+    if !unstaged.is_empty() {
+        let mut diff_opts = DiffOptions::new();
+        diff_opts.include_untracked(true);
+        diff_opts.recurse_untracked_dirs(true);
+        let diff = repo.diff_index_to_workdir(Some(&repo.index()?), Some(&mut diff_opts))?;
+
+        let mut unstaged_stats: std::collections::HashMap<String, (usize, usize)> =
+            std::collections::HashMap::new();
+        for i in 0..diff.deltas().len() {
+            let delta = diff.get_delta(i).unwrap();
+            let dp = delta
+                .new_file()
+                .path()
+                .or_else(|| delta.old_file().path())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, i) {
+                let (_, additions, deletions) = patch.line_stats().unwrap_or((0, 0, 0));
+                unstaged_stats.insert(dp, (additions, deletions));
+            }
+        }
+
+        for file in unstaged.iter_mut() {
+            if let Some((ins, del)) = unstaged_stats.get(&file.path) {
+                file.insertions = *ins;
+                file.deletions = *del;
+            }
+        }
+    }
+
+    Ok(GitStatus { staged, unstaged })
+}
+
+/// Get the unified diff content for a single file.
+/// If `is_staged` is true, diffs index vs HEAD. Otherwise diffs workdir vs index.
+pub fn git_file_diff(path: &Path, file_path: &str, is_staged: bool) -> Result<String, GitError> {
+    let repo = Repository::open(path)?;
+
+    let mut diff_opts = DiffOptions::new();
+    diff_opts.pathspec(file_path);
+
+    let diff = if is_staged {
+        // Index vs HEAD (staged changes).
+        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+        repo.diff_tree_to_index(
+            head_tree.as_ref(),
+            Some(&repo.index()?),
+            Some(&mut diff_opts),
+        )?
+    } else {
+        // Workdir vs index (unstaged changes).
+        diff_opts.include_untracked(true);
+        diff_opts.recurse_untracked_dirs(true);
+        repo.diff_index_to_workdir(Some(&repo.index()?), Some(&mut diff_opts))?
+    };
+
+    // Build unified diff string from the diff output.
+    // Include all lines: headers, hunk markers, and content.
+    let mut diff_text = String::new();
+    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        let origin = line.origin();
+        // Include the origin character for content lines (+, -, space).
+        // For headers and other lines, just include the content.
+        match origin {
+            '+' | '-' | ' ' => {
+                diff_text.push(origin);
+            }
+            // File headers, hunk headers, etc. - include content without prefix
+            'F' | 'H' | '>' | '<' | 'B' => {
+                // F = file header, H = hunk header, etc.
+            }
+            _ => {}
+        }
+        diff_text.push_str(&String::from_utf8_lossy(line.content()));
+        true
+    })?;
+
+    Ok(diff_text)
+}
+
+/// Stage a single file (equivalent to `git add <file>`).
+pub fn git_stage_file(path: &Path, file_path: &str) -> Result<(), GitError> {
+    let repo = Repository::open(path)?;
+    let mut index = repo.index()?;
+
+    let full_path = path.join(file_path);
+    if full_path.exists() {
+        // File exists: add it to the index.
+        index.add_path(std::path::Path::new(file_path))?;
+    } else {
+        // File was deleted: remove it from the index.
+        index.remove_path(std::path::Path::new(file_path))?;
+    }
+
+    index.write()?;
+
+    tracing::info!("Staged file: {} in {}", file_path, path.display());
+    Ok(())
+}
+
+/// Unstage a single file (equivalent to `git reset HEAD <file>`).
+/// Resets the index entry to match HEAD, leaving the working directory untouched.
+pub fn git_unstage_file(path: &Path, file_path: &str) -> Result<(), GitError> {
+    let repo = Repository::open(path)?;
+
+    // Get HEAD commit's tree.
+    let head = repo.head()?;
+    let head_commit = head.peel_to_commit()?;
+    let head_tree = head_commit.tree()?;
+
+    let file_p = std::path::Path::new(file_path);
+
+    let mut index = repo.index()?;
+
+    match head_tree.get_path(file_p) {
+        Ok(entry) => {
+            // File exists in HEAD: restore the index entry from HEAD.
+            let index_entry = git2::IndexEntry {
+                ctime: git2::IndexTime::new(0, 0),
+                mtime: git2::IndexTime::new(0, 0),
+                dev: 0,
+                ino: 0,
+                mode: entry.filemode() as u32,
+                uid: 0,
+                gid: 0,
+                file_size: 0,
+                id: entry.id(),
+                flags: 0,
+                flags_extended: 0,
+                path: file_path.as_bytes().to_vec(),
+            };
+            index.add(&index_entry)?;
+        }
+        Err(_) => {
+            // File does not exist in HEAD (was newly added): remove from index.
+            index.remove_path(file_p)?;
+        }
+    }
+
+    index.write()?;
+
+    tracing::info!("Unstaged file: {} in {}", file_path, path.display());
+    Ok(())
+}
+
+/// Stage multiple files in a single index operation (equivalent to `git add <file1> <file2> ...`).
+/// Opens the repository once, iterates all paths, writes the index once.
+pub fn git_stage_files(path: &Path, file_paths: &[String]) -> Result<(), GitError> {
+    let repo = Repository::open(path)?;
+    let mut index = repo.index()?;
+
+    for file_path in file_paths {
+        let full_path = path.join(file_path);
+        if full_path.exists() {
+            index.add_path(std::path::Path::new(file_path))?;
+        } else {
+            // File was deleted: remove it from the index.
+            index.remove_path(std::path::Path::new(file_path))?;
+        }
+    }
+
+    index.write()?;
+
+    tracing::info!("Staged {} files in {}", file_paths.len(), path.display());
+    Ok(())
+}
+
+/// Unstage multiple files in a single index operation (equivalent to `git reset HEAD <file1> <file2> ...`).
+/// Opens the repository once, iterates all paths, writes the index once.
+pub fn git_unstage_files(path: &Path, file_paths: &[String]) -> Result<(), GitError> {
+    let repo = Repository::open(path)?;
+
+    // Get HEAD commit's tree.
+    let head = repo.head()?;
+    let head_commit = head.peel_to_commit()?;
+    let head_tree = head_commit.tree()?;
+
+    let mut index = repo.index()?;
+
+    for file_path in file_paths {
+        let file_p = std::path::Path::new(file_path);
+
+        match head_tree.get_path(file_p) {
+            Ok(entry) => {
+                // File exists in HEAD: restore the index entry from HEAD.
+                let index_entry = git2::IndexEntry {
+                    ctime: git2::IndexTime::new(0, 0),
+                    mtime: git2::IndexTime::new(0, 0),
+                    dev: 0,
+                    ino: 0,
+                    mode: entry.filemode() as u32,
+                    uid: 0,
+                    gid: 0,
+                    file_size: 0,
+                    id: entry.id(),
+                    flags: 0,
+                    flags_extended: 0,
+                    path: file_path.as_bytes().to_vec(),
+                };
+                index.add(&index_entry)?;
+            }
+            Err(_) => {
+                // File does not exist in HEAD (was newly added): remove from index.
+                index.remove_path(file_p)?;
+            }
+        }
+    }
+
+    index.write()?;
+
+    tracing::info!("Unstaged {} files in {}", file_paths.len(), path.display());
+    Ok(())
+}
+
+/// Stage a specific hunk from a file (equivalent to staging a chunk in lazygit).
+/// `hunk_index` is 0-based.
+pub fn git_stage_hunk(path: &Path, file_path: &str, hunk_index: usize) -> Result<(), GitError> {
+    let repo = Repository::open(path)?;
+
+    // Get unstaged diff for this file (workdir vs index).
+    let mut diff_opts = DiffOptions::new();
+    diff_opts.pathspec(file_path);
+    diff_opts.include_untracked(true);
+    diff_opts.recurse_untracked_dirs(true);
+
+    let diff = repo.diff_index_to_workdir(Some(&repo.index()?), Some(&mut diff_opts))?;
+
+    // Find the patch for our file.
+    let mut patch_opt = None;
+    for i in 0..diff.deltas().len() {
+        if let Ok(Some(p)) = git2::Patch::from_diff(&diff, i) {
+            patch_opt = Some(p);
+            break;
+        }
+    }
+
+    let patch = patch_opt.ok_or_else(|| GitError::PathError("No patch found for file".to_string()))?;
+    let num_hunks = patch.num_hunks();
+
+    if hunk_index >= num_hunks {
+        return Err(GitError::PathError(format!(
+            "Hunk index {} out of range (file has {} hunks)",
+            hunk_index, num_hunks
+        )));
+    }
+
+    // Build a partial diff that includes only the requested hunk.
+    // We need to reconstruct a valid unified diff with header + one hunk.
+    let mut partial_diff = String::new();
+
+    // Add the diff header.
+    let delta = patch.delta();
+    let old_path = delta.old_file().path().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+    let new_path = delta.new_file().path().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+
+    partial_diff.push_str(&format!("--- a/{}\n", old_path));
+    partial_diff.push_str(&format!("+++ b/{}\n", new_path));
+
+    // Get the specific hunk.
+    let (hunk, _) = patch.hunk(hunk_index)?;
+    partial_diff.push_str(&format!(
+        "@@ -{},{} +{},{} @@\n",
+        hunk.old_start(),
+        hunk.old_lines(),
+        hunk.new_start(),
+        hunk.new_lines()
+    ));
+
+    // Add all lines from this hunk.
+    let num_lines = patch.num_lines_in_hunk(hunk_index)?;
+    for line_idx in 0..num_lines {
+        let line = patch.line_in_hunk(hunk_index, line_idx)?;
+        let origin = line.origin();
+        if origin == '+' || origin == '-' || origin == ' ' {
+            partial_diff.push(origin);
+        }
+        partial_diff.push_str(&String::from_utf8_lossy(line.content()));
+    }
+
+    // Parse the partial diff and apply to index.
+    let partial_diff_obj = git2::Diff::from_buffer(partial_diff.as_bytes())?;
+
+    // Apply to the index (staging area).
+    repo.apply(&partial_diff_obj, git2::ApplyLocation::Index, None)?;
+
+    tracing::info!(
+        "Staged hunk {} of file {} in {}",
+        hunk_index,
+        file_path,
+        path.display()
+    );
+    Ok(())
+}
+
 /// Create a git signature for commits.
 fn make_signature<'a>() -> Result<Signature<'a>, git2::Error> {
     Signature::now("Kobo", "kobo@local")

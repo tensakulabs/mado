@@ -14,7 +14,7 @@ pub async fn attach_chat_session(
     session_id: String,
     on_event: Channel<StreamEvent>,
 ) -> Result<(), String> {
-    let guard = state.client.lock().await;
+    let guard = state.client.read().await;
     let client = guard
         .as_ref()
         .ok_or_else(|| "Not connected to daemon".to_string())?;
@@ -144,7 +144,7 @@ pub async fn attach_session(
     session_id: String,
     on_output: Channel<String>,
 ) -> Result<(), String> {
-    let guard = state.client.lock().await;
+    let guard = state.client.read().await;
     let client = guard
         .as_ref()
         .ok_or_else(|| "Not connected to daemon".to_string())?;

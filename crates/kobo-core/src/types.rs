@@ -107,6 +107,13 @@ pub struct FileDiff {
     pub status: String,
 }
 
+/// Git staging status: staged and unstaged files separately.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitStatus {
+    pub staged: Vec<FileDiff>,
+    pub unstaged: Vec<FileDiff>,
+}
+
 /// Terminal/PTY size in rows and columns.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PtySize {

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useCallback } from "react";
 import { usePaneStore } from "../stores/panes";
 import { useSessionStore } from "../stores/sessions";
+import { useUiStore } from "../stores/ui";
 
 interface UseKeyboardOptions {
   onOpenCommandPalette?: () => void;
@@ -29,8 +30,12 @@ export function useKeyboard(options: UseKeyboardOptions = {}) {
   const undoClose = usePaneStore((s) => s.undoClose);
   const navigateFocus = usePaneStore((s) => s.navigateFocus);
   const activePaneId = usePaneStore((s) => s.activePaneId);
+  const getLeaves = usePaneStore((s) => s.getLeaves);
   const createSession = useSessionStore((s) => s.createSession);
   const defaultModel = useSessionStore((s) => s.defaultModel);
+  const currentView = useUiStore((s) => s.currentView);
+  const openGitView = useUiStore((s) => s.openGitView);
+  const closeGitView = useUiStore((s) => s.closeGitView);
 
   const handleSplit = useCallback(
     async (direction: "horizontal" | "vertical") => {
@@ -55,6 +60,47 @@ export function useKeyboard(options: UseKeyboardOptions = {}) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
         e.preventDefault();
         options.onOpenCommandPalette?.();
+        return;
+      }
+
+      // Cmd+G / Ctrl+G -> toggle GitView for current session.
+      if ((e.metaKey || e.ctrlKey) && e.key === "g") {
+        e.preventDefault();
+        if (currentView === "git") {
+          closeGitView();
+        } else if (activePaneId) {
+          // Find the session for the active pane.
+          const leaves = getLeaves();
+          const activeLeaf = leaves.find((l) => l.id === activePaneId);
+          if (activeLeaf?.sessionId) {
+            openGitView(activeLeaf.sessionId);
+          }
+        }
+        return;
+      }
+
+      // Ctrl+Plus / Ctrl+Equal -> zoom in.
+      if (e.ctrlKey && (e.key === "+" || e.key === "=")) {
+        e.preventDefault();
+        const root = document.documentElement;
+        const currentZoom = parseFloat(root.style.fontSize || "16") || 16;
+        root.style.fontSize = `${Math.min(currentZoom + 2, 24)}px`;
+        return;
+      }
+
+      // Ctrl+Minus -> zoom out.
+      if (e.ctrlKey && e.key === "-") {
+        e.preventDefault();
+        const root = document.documentElement;
+        const currentZoom = parseFloat(root.style.fontSize || "16") || 16;
+        root.style.fontSize = `${Math.max(currentZoom - 2, 10)}px`;
+        return;
+      }
+
+      // Ctrl+0 -> reset zoom.
+      if (e.ctrlKey && e.key === "0") {
+        e.preventDefault();
+        document.documentElement.style.fontSize = "16px";
         return;
       }
 
@@ -132,5 +178,9 @@ export function useKeyboard(options: UseKeyboardOptions = {}) {
     undoClose,
     activePaneId,
     options,
+    currentView,
+    openGitView,
+    closeGitView,
+    getLeaves,
   ]);
 }

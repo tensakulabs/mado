@@ -11,6 +11,8 @@ interface SessionState {
   isLoading: boolean;
   error: string | null;
   defaultModel: string;
+  // Per-session model overrides (sessionId -> model).
+  modelOverrides: Map<string, string>;
 }
 
 interface SessionActions {
@@ -20,10 +22,17 @@ interface SessionActions {
     model: string,
     rows: number,
     cols: number,
+    cwd?: string,
   ) => Promise<Session>;
   destroySession: (sessionId: string) => Promise<void>;
   getSession: (sessionId: string) => Session | undefined;
+  getSessionsByWorkspace: (workingDir: string) => Session[];
   setDefaultModel: (model: string) => void;
+  // Per-session model selection.
+  getSessionModel: (sessionId: string) => string;
+  setSessionModel: (sessionId: string, model: string) => void;
+  // Update session's working directory.
+  updateWorkingDir: (sessionId: string, workingDir: string) => Promise<void>;
 }
 
 export const useSessionStore = create<SessionState & SessionActions>()(
@@ -32,6 +41,7 @@ export const useSessionStore = create<SessionState & SessionActions>()(
     isLoading: false,
     error: null,
     defaultModel: "sonnet",
+    modelOverrides: new Map(),
 
     fetchSessions: async () => {
       set({ isLoading: true, error: null });
@@ -48,8 +58,9 @@ export const useSessionStore = create<SessionState & SessionActions>()(
       model: string,
       rows: number,
       cols: number,
+      cwd?: string,
     ) => {
-      const session = await ipcCreateSession(name, model, rows, cols);
+      const session = await ipcCreateSession(name, model, rows, cols, cwd);
       set((state) => ({
         sessions: [...state.sessions, session],
       }));
@@ -67,8 +78,37 @@ export const useSessionStore = create<SessionState & SessionActions>()(
       return get().sessions.find((s) => s.id === sessionId);
     },
 
+    getSessionsByWorkspace: (workingDir: string) => {
+      return get().sessions.filter((s) => s.working_dir === workingDir);
+    },
+
     setDefaultModel: (model: string) => {
       set({ defaultModel: model });
+    },
+
+    getSessionModel: (sessionId: string) => {
+      const override = get().modelOverrides.get(sessionId);
+      if (override) return override;
+      // Fall back to session's original model or default.
+      const session = get().sessions.find((s) => s.id === sessionId);
+      return session?.model ?? get().defaultModel;
+    },
+
+    setSessionModel: (sessionId: string, model: string) => {
+      set((state) => {
+        const newOverrides = new Map(state.modelOverrides);
+        newOverrides.set(sessionId, model);
+        return { modelOverrides: newOverrides };
+      });
+    },
+
+    updateWorkingDir: async (sessionId: string, workingDir: string) => {
+      // Update local state. Backend IPC can be added later if needed.
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === sessionId ? { ...s, working_dir: workingDir } : s,
+        ),
+      }));
     },
   }),
 );

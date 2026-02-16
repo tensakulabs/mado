@@ -1,11 +1,14 @@
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use tokio::signal;
+use tokio::sync::Mutex;
 use tracing;
 
 use crate::pid::{PidFile, PidError};
 use crate::server;
+use crate::state::DaemonState;
 
 /// Configuration for starting the daemon.
 #[derive(Debug, Clone)]
@@ -109,11 +112,14 @@ pub async fn start_with_shutdown(
 
     // Step 5: Load existing state (best-effort -- if missing, start fresh).
     let state_path = config.state_path.clone();
-    let state = crate::state::DaemonState::load(&state_path).unwrap_or_else(|e| {
+    let state = DaemonState::load(&state_path).unwrap_or_else(|e| {
         tracing::warn!("Failed to load state from {}: {}, starting fresh", state_path.display(), e);
-        crate::state::DaemonState::default()
+        DaemonState::default()
     });
     tracing::info!("Loaded state with {} sessions", state.sessions.len());
+
+    // Wrap state in Arc<Mutex<>> for sharing with server and shutdown handler.
+    let daemon_state = Arc::new(Mutex::new(state));
 
     // Step 6: Start the server.
     tracing::info!("Starting server on {}", config.socket_path.display());
@@ -123,11 +129,12 @@ pub async fn start_with_shutdown(
 
     // Spawn a task to wait for the shutdown signal and then save state.
     let save_state_path = config.state_path.clone();
-    let save_state = state.clone();
+    let save_state = daemon_state.clone();
     tokio::spawn(async move {
         shutdown_signal.await;
         // Save state before shutting down.
-        if let Err(e) = save_state.save(&save_state_path) {
+        let state_guard = save_state.lock().await;
+        if let Err(e) = state_guard.save(&save_state_path) {
             tracing::error!("Failed to save state on shutdown: {}", e);
         } else {
             tracing::info!("State saved on shutdown");
@@ -135,7 +142,7 @@ pub async fn start_with_shutdown(
         let _ = shutdown_tx.send(());
     });
 
-    server::start_server(config.socket_path, async {
+    server::start_server(config.socket_path, state_path, daemon_state, async {
         shutdown_rx.await.ok();
     })
     .await?;

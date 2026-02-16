@@ -1,21 +1,32 @@
 @import "tailwindcss";
 
 :root {
-  --bg-primary: #0f0f23;
-  --bg-secondary: #1a1a2e;
-  --bg-card: #16213e;
-  --text-primary: #e0e0e0;
-  --text-secondary: #a0a0a0;
-  --accent-green: #4ade80;
-  --accent-yellow: #facc15;
-  --accent-red: #f87171;
+  /* Default theme values (dark) - overridden by JS */
+  --color-bgPrimary: #0a0a1a;
+  --color-bgSecondary: #0f0f23;
+  --color-bgTertiary: #16213e;
+  --color-borderPrimary: rgba(55, 65, 81, 0.5);
+  --color-borderSecondary: rgba(55, 65, 81, 0.3);
+  --color-textPrimary: #ffffff;
+  --color-textSecondary: #d1d5db;
+  --color-textMuted: #6b7280;
+  --color-accent: #3b82f6;
+  --color-accentHover: #2563eb;
+  --color-success: #22c55e;
+  --color-warning: #eab308;
+  --color-error: #ef4444;
+  --color-aiIndicator: #4ade80;
+  --color-userIndicator: #60a5fa;
+  --color-selection: rgba(59, 130, 246, 0.4);
+  --color-selectionText: #ffffff;
+  --zoom-level: 1;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  background-color: var(--color-bgPrimary);
+  color: var(--color-textPrimary);
   font-family:
     "Inter",
     -apple-system,
@@ -26,6 +37,19 @@ body {
   -webkit-font-smoothing: antialiased;
   overflow: hidden;
   height: 100vh;
+  /* Use CSS zoom for interface scaling (works in WebKit/Chromium) */
+  zoom: var(--zoom-level);
+}
+
+/* Text selection styling */
+::selection {
+  background-color: var(--color-selection);
+  color: var(--color-selectionText);
+}
+
+::-moz-selection {
+  background-color: var(--color-selection);
+  color: var(--color-selectionText);
 }
 
 #root {
@@ -42,4 +66,69 @@ body {
 
 .xterm-viewport {
   overflow-y: auto !important;
+}
+
+/* Theme-aware utility classes */
+.bg-theme-primary {
+  background-color: var(--color-bgPrimary) !important;
+}
+
+.bg-theme-secondary {
+  background-color: var(--color-bgSecondary) !important;
+}
+
+.bg-theme-tertiary {
+  background-color: var(--color-bgTertiary) !important;
+}
+
+.text-theme-primary {
+  color: var(--color-textPrimary) !important;
+}
+
+.text-theme-secondary {
+  color: var(--color-textSecondary) !important;
+}
+
+.text-theme-muted {
+  color: var(--color-textMuted) !important;
+}
+
+.text-theme-accent {
+  color: var(--color-accent) !important;
+}
+
+.border-theme-primary {
+  border-color: var(--color-borderPrimary) !important;
+}
+
+.border-theme-secondary {
+  border-color: var(--color-borderSecondary) !important;
+}
+
+/* Hover variants */
+.hover\:text-theme-primary:hover {
+  color: var(--color-textPrimary) !important;
+}
+
+.hover\:bg-theme-tertiary:hover {
+  background-color: var(--color-bgTertiary) !important;
+}
+
+/* Divide variants */
+.divide-theme-primary > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--color-borderPrimary) !important;
+}
+
+/* Focus variants */
+.focus\:border-theme-accent:focus {
+  border-color: var(--color-accent) !important;
+}
+
+/* Semantic colors for role indicators */
+.text-ai-indicator {
+  color: var(--color-aiIndicator) !important;
+}
+
+.text-user-indicator {
+  color: var(--color-userIndicator) !important;
 }

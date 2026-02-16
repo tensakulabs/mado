@@ -57,6 +57,13 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **CHNG-03**: User can click indicator to see file breakdown
 - [ ] **CHNG-04**: Indicator shows 0 changes after save/commit
 
+### Git View
+
+- [ ] **GIT-01**: User can view staged and unstaged files in full-screen git view
+- [ ] **GIT-02**: User can select a file and see its diff with syntax highlighting
+- [ ] **GIT-03**: User can stage/unstage individual files (and optionally individual hunks)
+- [ ] **GIT-04**: User can write a commit message and commit directly from the UI
+
 ### UX Polish
 
 - [ ] **UX-01**: Command palette opens with Cmd+K
@@ -72,6 +79,14 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **UX-11**: Destructive actions have undo option (8-second window)
 - [ ] **UX-12**: UI uses "Conversations" and "Spaces" vocabulary (no jargon)
 - [ ] **UX-13**: Escape hatch: Home button returns to single-pane view
+
+### Session Management
+
+- [ ] **SESSION-01**: User can see all Claude sessions grouped by project with metadata (date, size, message count)
+- [ ] **SESSION-02**: User can filter sessions by project, date range, or size
+- [ ] **SESSION-03**: User can select multiple sessions and move them to Trash (recoverable)
+- [ ] **SESSION-04**: User can view a session's transcript in a read-only viewer
+- [ ] **SESSION-05**: User can see total storage usage and cleanup suggestions
 
 ### Platform
 
@@ -155,6 +170,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHNG-02 | Phase 5 | Pending |
 | CHNG-03 | Phase 5 | Pending |
 | CHNG-04 | Phase 5 | Pending |
+| GIT-01 | Phase 7 | Pending |
+| GIT-02 | Phase 7 | Pending |
+| GIT-03 | Phase 7 | Pending |
+| GIT-04 | Phase 7 | Pending |
 | UX-01 | Phase 6 | Pending |
 | UX-02 | Phase 6 | Pending |
 | UX-03 | Phase 6 | Pending |
@@ -168,13 +187,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | UX-11 | Phase 6 | Pending |
 | UX-12 | Phase 6 | Pending |
 | UX-13 | Phase 6 | Pending |
+| SESSION-01 | Phase 8 | Pending |
+| SESSION-02 | Phase 8 | Pending |
+| SESSION-03 | Phase 8 | Pending |
+| SESSION-04 | Phase 8 | Pending |
+| SESSION-05 | Phase 8 | Pending |
 | PLAT-01 | Phase 1 | Pending |
 | PLAT-02 | Phase 1 | Pending |
 | PLAT-03 | Phase 2 | Pending |
 
 **Coverage:**
-- v1 requirements: 51 total
-- Mapped to phases: 51
+- v1 requirements: 60 total
+- Mapped to phases: 60
 - Unmapped: 0
 
 ---

@@ -1,3 +1,5 @@
+pub mod claude_history;
+pub mod config;
 pub mod conversation;
 pub mod git_ops;
 pub mod keystore;

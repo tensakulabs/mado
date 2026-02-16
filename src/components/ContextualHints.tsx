@@ -5,7 +5,7 @@ const HINTS = [
   {
     id: "welcome",
     message:
-      "Welcome to Kobo! Start typing to chat with Claude. Use Cmd+K to open the command palette.",
+      "Welcome to Kobo! Start typing to chat. Use Cmd+K to open the command palette.",
     showAfterMs: 1000,
   },
   {
@@ -101,7 +101,7 @@ export function ContextualHints({ enabled }: ContextualHintsProps) {
   if (!currentHint || dismissed.has(currentHint.id)) return null;
 
   return (
-    <div className="fixed bottom-10 left-1/2 z-40 -translate-x-1/2 transform">
+    <div className="fixed top-12 left-1/2 z-40 -translate-x-1/2 transform">
       <div className="flex items-center gap-3 rounded-lg border border-blue-800/30 bg-blue-900/40 px-4 py-2 shadow-lg backdrop-blur-sm">
         <span className="text-xs text-blue-200">{currentHint.message}</span>
         <div className="flex items-center gap-1">
@@ -109,13 +109,13 @@ export function ContextualHints({ enabled }: ContextualHintsProps) {
             onClick={() => dismissHint(currentHint.id)}
             className="rounded px-1.5 py-0.5 text-[10px] text-blue-400 hover:bg-blue-800/30"
           >
-            Got it
+            Ok
           </button>
           <button
             onClick={dismissAll}
-            className="rounded px-1.5 py-0.5 text-[10px] text-gray-500 hover:text-gray-300"
+            className="rounded px-1.5 py-0.5 text-[10px] text-theme-muted hover:text-theme-secondary"
           >
-            Hide all
+            Hide
           </button>
         </div>
       </div>

@@ -141,6 +141,11 @@ mod tests {
             working_dir: None,
             command: None,
             shell_fallback: false,
+            conversation_state: kobo_core::types::ConversationState::Empty,
+            claude_session_id: None,
+            message_count: 0,
+            total_usage: None,
+            total_cost_usd: None,
         }
     }
 

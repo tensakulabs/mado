@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
 use kobo_core::client::{default_pid_path, default_socket_path, default_state_path};
 use kobo_daemon::lifecycle::{daemonize, DaemonConfig, start};
@@ -88,10 +88,27 @@ fn main() {
 }
 
 async fn async_main(args: DaemonArgs) {
-    // Set up tracing/logging.
+    // Set up tracing/logging with file appender.
     let filter = EnvFilter::try_new(&args.log_level).unwrap_or_else(|_| EnvFilter::new("info"));
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
+
+    // Create log directory.
+    let log_dir = dirs::home_dir()
+        .map(|h| h.join(".kobo").join("logs"))
+        .unwrap_or_else(|| PathBuf::from("/tmp/kobo-logs"));
+    std::fs::create_dir_all(&log_dir).ok();
+
+    // File appender - writes to ~/.kobo/logs/daemon.log.
+    let file_appender = tracing_appender::rolling::daily(&log_dir, "daemon.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
+    // Keep the guard alive for the duration of the program.
+    // The guard ensures all logs are flushed when dropped.
+    let _file_guard = _guard;
+
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(fmt::layer().with_writer(non_blocking))
+        .with(fmt::layer().with_writer(std::io::stdout))
         .init();
 
     tracing::info!(

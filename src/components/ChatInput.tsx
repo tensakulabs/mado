@@ -1,10 +1,13 @@
 import { useState, useRef, useCallback, KeyboardEvent } from "react";
+import { getContextWindow } from "../lib/models";
 
 interface ChatInputProps {
   sessionId: string;
   onSend: (content: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  model?: string;
+  contextPercent?: number;
 }
 
 /**
@@ -15,6 +18,8 @@ export function ChatInput({
   onSend,
   disabled = false,
   placeholder = "Type a message...",
+  model,
+  contextPercent,
 }: ChatInputProps) {
   const [value, setValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -51,7 +56,7 @@ export function ChatInput({
   }, []);
 
   return (
-    <div className="border-t border-gray-700 bg-[#0f0f23] p-3">
+    <div className="border-t border-theme-primary bg-theme-secondary p-3">
       <div className="flex gap-2">
         <textarea
           ref={textareaRef}
@@ -62,7 +67,7 @@ export function ChatInput({
           disabled={disabled}
           placeholder={placeholder}
           rows={1}
-          className={`flex-1 resize-none rounded-lg border border-gray-600 bg-[#1a1a2e] px-4 py-2 text-sm text-gray-100 placeholder-gray-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 ${
+          className={`flex-1 resize-none rounded-lg border border-theme-primary bg-theme-tertiary px-4 py-2 text-sm text-theme-primary placeholder:text-theme-muted focus:border-theme-accent focus:outline-none focus:ring-1 focus:ring-blue-500 ${
             disabled ? "cursor-not-allowed opacity-50" : ""
           }`}
           style={{ minHeight: "40px", maxHeight: "200px" }}
@@ -79,8 +84,29 @@ export function ChatInput({
           Send
         </button>
       </div>
-      <div className="mt-1 text-xs text-gray-500">
-        Press Enter to send, Shift+Enter for new line
+      <div className="mt-1 text-xs text-theme-muted">
+        <div>Press Enter to send, Shift+Enter for new line</div>
+        {model && (
+          <div className="flex items-center gap-2 mt-1">
+            <span className="font-medium text-blue-400">{model.charAt(0).toUpperCase() + model.slice(1)}</span>
+            <div className="w-24 h-2.5 bg-theme-tertiary rounded overflow-hidden">
+              <div
+                className="h-full bg-blue-500 rounded transition-all"
+                style={{ width: `${Math.min(contextPercent ?? 0, 100)}%` }}
+              />
+            </div>
+            <span className="text-theme-secondary">
+              {contextPercent && contextPercent > 0
+                ? (() => {
+                    const contextWindow = getContextWindow(model ?? "sonnet");
+                    const usedK = Math.round((contextPercent / 100) * (contextWindow / 1000));
+                    const maxK = contextWindow / 1000;
+                    return `${contextPercent.toFixed(0)}% (${usedK}K / ${maxK}K)`;
+                  })()
+                : "--"}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

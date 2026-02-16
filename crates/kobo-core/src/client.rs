@@ -203,13 +203,17 @@ impl DaemonClient {
         model: &str,
         rows: u16,
         cols: u16,
+        cwd: Option<&str>,
     ) -> Result<crate::types::Session, ClientError> {
-        let body_json = serde_json::json!({
+        let mut body_json = serde_json::json!({
             "name": name,
             "model": model,
             "rows": rows,
             "cols": cols,
         });
+        if let Some(dir) = cwd {
+            body_json["cwd"] = serde_json::json!(dir);
+        }
         let body = self.post("/sessions", &body_json).await?;
         let response: DaemonResponse = serde_json::from_slice(&body)?;
         match response {
@@ -355,6 +359,151 @@ impl DaemonClient {
         }
     }
 
+    // ── Git staging methods ──
+
+    /// Get git staging status (staged + unstaged files).
+    pub async fn git_status(
+        &self,
+        session_id: &str,
+    ) -> Result<crate::types::GitStatus, ClientError> {
+        let body = self
+            .get(&format!("/sessions/{}/git/status", session_id))
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::GitStatusResult { status } => Ok(status),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Get unified diff content for a single file.
+    pub async fn git_file_diff(
+        &self,
+        session_id: &str,
+        file_path: &str,
+        staged: bool,
+    ) -> Result<String, ClientError> {
+        let body = self
+            .get(&format!(
+                "/sessions/{}/git/diff?file_path={}&staged={}",
+                session_id, file_path, staged
+            ))
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::FileDiffContent { diff } => Ok(diff),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Stage a single file.
+    pub async fn git_stage_file(
+        &self,
+        session_id: &str,
+        file_path: &str,
+    ) -> Result<(), ClientError> {
+        let body_json = serde_json::json!({ "file_path": file_path });
+        let body = self
+            .post(&format!("/sessions/{}/git/stage", session_id), &body_json)
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Pong => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Unstage a single file.
+    pub async fn git_unstage_file(
+        &self,
+        session_id: &str,
+        file_path: &str,
+    ) -> Result<(), ClientError> {
+        let body_json = serde_json::json!({ "file_path": file_path });
+        let body = self
+            .post(
+                &format!("/sessions/{}/git/unstage", session_id),
+                &body_json,
+            )
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Pong => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Stage multiple files in a single batch operation.
+    pub async fn git_stage_files(
+        &self,
+        session_id: &str,
+        file_paths: &[String],
+    ) -> Result<(), ClientError> {
+        let body_json = serde_json::json!({ "file_paths": file_paths });
+        let body = self
+            .post(
+                &format!("/sessions/{}/git/stage-files", session_id),
+                &body_json,
+            )
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Pong => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Unstage multiple files in a single batch operation.
+    pub async fn git_unstage_files(
+        &self,
+        session_id: &str,
+        file_paths: &[String],
+    ) -> Result<(), ClientError> {
+        let body_json = serde_json::json!({ "file_paths": file_paths });
+        let body = self
+            .post(
+                &format!("/sessions/{}/git/unstage-files", session_id),
+                &body_json,
+            )
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Pong => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Stage a single hunk from a file.
+    pub async fn git_stage_hunk(
+        &self,
+        session_id: &str,
+        file_path: &str,
+        hunk_index: usize,
+    ) -> Result<(), ClientError> {
+        let body_json = serde_json::json!({
+            "file_path": file_path,
+            "hunk_index": hunk_index
+        });
+        let body = self
+            .post(
+                &format!("/sessions/{}/git/stage-hunk", session_id),
+                &body_json,
+            )
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Pong => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
     // ── Chat mode methods ──
 
     /// Send a message to a session (chat mode).
@@ -415,6 +564,34 @@ impl DaemonClient {
         let response: DaemonResponse = serde_json::from_slice(&body)?;
         match response {
             DaemonResponse::CancelAccepted => Ok(()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Import Claude CLI history for a session's working directory.
+    pub async fn import_history(
+        &self,
+        session_id: &str,
+        limit: Option<usize>,
+        all_sessions: Option<bool>,
+    ) -> Result<Vec<crate::types::Message>, ClientError> {
+        let mut path = format!("/sessions/{}/history", session_id);
+        let mut params = Vec::new();
+        if let Some(l) = limit {
+            params.push(format!("limit={}", l));
+        }
+        if let Some(all) = all_sessions {
+            params.push(format!("all_sessions={}", all));
+        }
+        if !params.is_empty() {
+            path.push('?');
+            path.push_str(&params.join("&"));
+        }
+        let body = self.get(&path).await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::Messages { messages } => Ok(messages),
             DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
             _ => Err(ClientError::UnexpectedResponse),
         }

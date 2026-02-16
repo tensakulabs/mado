@@ -7,7 +7,7 @@ export type SplitDirection = "horizontal" | "vertical";
 export interface LeafNode {
   type: "leaf";
   id: string;
-  sessionId: string;
+  sessionId?: string; // Optional - null when pane is in "welcome" state
 }
 
 export interface SplitNode {
@@ -34,8 +34,8 @@ interface PaneState {
 }
 
 interface PaneActions {
-  // Initialize with a single pane.
-  initSinglePane: (sessionId: string) => string;
+  // Initialize with a single pane (sessionId optional for welcome state).
+  initSinglePane: (sessionId?: string) => string;
 
   // Split the active pane in a given direction.
   splitPane: (direction: SplitDirection, newSessionId: string) => string | null;
@@ -57,6 +57,9 @@ interface PaneActions {
 
   // Navigate focus in a direction.
   navigateFocus: (dir: "left" | "right" | "up" | "down") => void;
+
+  // Replace the session of a pane (keep pane, swap session).
+  replaceSession: (paneId: string, newSessionId: string) => void;
 }
 
 let nextPaneId = 1;
@@ -135,7 +138,7 @@ export const usePaneStore = create<PaneState & PaneActions>()((set, get) => ({
   activePaneId: null,
   closedPanes: [],
 
-  initSinglePane: (sessionId: string) => {
+  initSinglePane: (sessionId?: string) => {
     const id = generatePaneId();
     set({
       root: { type: "leaf", id, sessionId },
@@ -303,5 +306,17 @@ export const usePaneStore = create<PaneState & PaneActions>()((set, get) => ({
     }
 
     set({ activePaneId: leaves[newIndex].id });
+  },
+
+  replaceSession: (paneId: string, newSessionId: string) => {
+    const { root } = get();
+    if (!root) return;
+
+    const target = findNodeById(root, paneId);
+    if (!target || target.type !== "leaf") return;
+
+    const newLeaf: LeafNode = { ...target, sessionId: newSessionId };
+    const newRoot = replaceNode(root, paneId, newLeaf);
+    set({ root: newRoot });
   },
 }));

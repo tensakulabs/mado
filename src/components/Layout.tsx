@@ -12,8 +12,8 @@ export function Layout() {
 
   if (!root) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-[#0f0f23]">
-        <p className="text-sm text-gray-500">No panes</p>
+      <div className="flex h-full w-full items-center justify-center bg-theme-secondary">
+        <p className="text-sm text-theme-muted">No panes</p>
       </div>
     );
   }
@@ -109,7 +109,7 @@ function SplitView({
           isHorizontal
             ? "w-1 cursor-col-resize hover:bg-blue-500/40"
             : "h-1 cursor-row-resize hover:bg-blue-500/40"
-        } flex-shrink-0 bg-gray-700/30 transition-colors`}
+        } flex-shrink-0 bg-theme-tertiary transition-colors`}
         onMouseDown={handleMouseDown}
       />
 

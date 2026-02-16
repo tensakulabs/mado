@@ -30,10 +30,25 @@ impl SessionManager {
         name: String,
         model: String,
         pty_size: PtySize,
-        api_key: Option<String>,
+        cwd: Option<String>,
     ) -> Result<Session, SessionError> {
         let session_id = SessionId::new(Uuid::new_v4().to_string());
         let now = Utc::now();
+
+        // Resolve working directory - default to ~/kobo if not specified.
+        let working_dir = match cwd {
+            Some(dir) => dir,
+            None => {
+                let default_dir = dirs::home_dir()
+                    .map(|h| h.join("kobo"))
+                    .unwrap_or_else(|| std::path::PathBuf::from("/tmp/kobo"));
+                // Create the default directory if it doesn't exist.
+                if !default_dir.exists() {
+                    std::fs::create_dir_all(&default_dir).ok();
+                }
+                default_dir.to_string_lossy().to_string()
+            }
+        };
 
         // Spawn the PTY process with Claude CLI.
         let spawn_result = {
@@ -43,8 +58,8 @@ impl SessionManager {
                 &model,
                 pty_size.rows,
                 pty_size.cols,
-                None, // working_dir
-                api_key.as_deref(),
+                Some(&working_dir),
+                None, // api_key - from keystore
             )
             .map_err(SessionError::ProcessError)?
         };
@@ -56,7 +71,7 @@ impl SessionManager {
             status: SessionStatus::Active,
             created_at: now,
             updated_at: now,
-            working_dir: None,
+            working_dir: Some(working_dir),
             command: Some(spawn_result.command),
             shell_fallback: spawn_result.shell_fallback,
             // Chat mode fields (initialized to defaults).
@@ -104,13 +119,10 @@ impl SessionManager {
             }
         }
 
-        // Update session status.
+        // Remove session from state entirely (not just mark terminated).
         {
             let mut state = self.state.lock().await;
-            if let Some(session) = state.sessions.get_mut(&id.0) {
-                session.status = SessionStatus::Terminated;
-                session.updated_at = Utc::now();
-            }
+            state.remove_session(id);
         }
 
         tracing::info!("Destroyed session: {}", id);

@@ -1,4 +1,6 @@
 use std::os::unix::fs::PermissionsExt;
+use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::Duration;
 
 use http_body_util::{BodyExt, Full};
@@ -7,9 +9,18 @@ use hyper::Request;
 use hyper_util::rt::TokioIo;
 use tempfile::TempDir;
 use tokio::net::UnixStream;
+use tokio::sync::Mutex;
 use tokio::time::sleep;
 
 use kobo_core::protocol::DaemonResponse;
+use kobo_daemon::state::DaemonState;
+
+/// Create test state for server tests.
+fn create_test_state(tmp_dir: &TempDir) -> (Arc<Mutex<DaemonState>>, PathBuf) {
+    let state_path = tmp_dir.path().join("state.json");
+    let daemon_state = Arc::new(Mutex::new(DaemonState::default()));
+    (daemon_state, state_path)
+}
 
 /// Helper to send a GET request to the daemon over a Unix socket.
 async fn get_request(socket_path: &std::path::Path, path: &str) -> (u16, Bytes) {
@@ -56,6 +67,7 @@ async fn wait_for_socket(socket_path: &std::path::Path, timeout: Duration) -> bo
 async fn test_health_endpoint_returns_valid_status() {
     let tmp_dir = TempDir::new().expect("Failed to create temp dir");
     let socket_path = tmp_dir.path().join("test.sock");
+    let (daemon_state, state_path) = create_test_state(&tmp_dir);
 
     let socket_path_clone = socket_path.clone();
 
@@ -64,6 +76,8 @@ async fn test_health_endpoint_returns_valid_status() {
     let server_handle = tokio::spawn(async move {
         kobo_daemon::server::start_server(
             socket_path_clone,
+            state_path,
+            daemon_state,
             async {
                 shutdown_rx.await.ok();
             },
@@ -109,6 +123,7 @@ async fn test_health_endpoint_returns_valid_status() {
 async fn test_ping_endpoint_returns_pong() {
     let tmp_dir = TempDir::new().expect("Failed to create temp dir");
     let socket_path = tmp_dir.path().join("test.sock");
+    let (daemon_state, state_path) = create_test_state(&tmp_dir);
 
     let socket_path_clone = socket_path.clone();
 
@@ -116,6 +131,8 @@ async fn test_ping_endpoint_returns_pong() {
     let server_handle = tokio::spawn(async move {
         kobo_daemon::server::start_server(
             socket_path_clone,
+            state_path,
+            daemon_state,
             async {
                 shutdown_rx.await.ok();
             },
@@ -148,6 +165,7 @@ async fn test_ping_endpoint_returns_pong() {
 async fn test_socket_permissions_are_0600() {
     let tmp_dir = TempDir::new().expect("Failed to create temp dir");
     let socket_path = tmp_dir.path().join("test.sock");
+    let (daemon_state, state_path) = create_test_state(&tmp_dir);
 
     let socket_path_clone = socket_path.clone();
 
@@ -155,6 +173,8 @@ async fn test_socket_permissions_are_0600() {
     let _server_handle = tokio::spawn(async move {
         kobo_daemon::server::start_server(
             socket_path_clone,
+            state_path,
+            daemon_state,
             async {
                 shutdown_rx.await.ok();
             },
@@ -184,6 +204,7 @@ async fn test_socket_permissions_are_0600() {
 async fn test_stale_socket_cleanup() {
     let tmp_dir = TempDir::new().expect("Failed to create temp dir");
     let socket_path = tmp_dir.path().join("test.sock");
+    let (daemon_state, state_path) = create_test_state(&tmp_dir);
 
     // Create a dummy file at the socket path to simulate a stale socket.
     std::fs::write(&socket_path, "stale").expect("Failed to create dummy file");
@@ -195,6 +216,8 @@ async fn test_stale_socket_cleanup() {
     let server_handle = tokio::spawn(async move {
         kobo_daemon::server::start_server(
             socket_path_clone,
+            state_path,
+            daemon_state,
             async {
                 shutdown_rx.await.ok();
             },
@@ -220,6 +243,7 @@ async fn test_stale_socket_cleanup() {
 async fn test_client_health_check() {
     let tmp_dir = TempDir::new().expect("Failed to create temp dir");
     let socket_path = tmp_dir.path().join("test.sock");
+    let (daemon_state, state_path) = create_test_state(&tmp_dir);
 
     let socket_path_clone = socket_path.clone();
 
@@ -227,6 +251,8 @@ async fn test_client_health_check() {
     let _server_handle = tokio::spawn(async move {
         kobo_daemon::server::start_server(
             socket_path_clone,
+            state_path,
+            daemon_state,
             async {
                 shutdown_rx.await.ok();
             },

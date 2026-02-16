@@ -19,6 +19,7 @@ export interface Session {
   working_dir?: string;
   command?: string;
   shell_fallback: boolean;
+  message_count: number;
 }
 
 export interface ModelInfo {
@@ -47,6 +48,11 @@ export interface DiffSummary {
   files: FileDiff[];
   total_insertions: number;
   total_deletions: number;
+}
+
+export interface GitStatus {
+  staged: FileDiff[];
+  unstaged: FileDiff[];
 }
 
 // ── Chat mode types ──
@@ -90,6 +96,10 @@ export type StreamEvent =
 
 // ── Daemon commands ──
 
+export async function ping(): Promise<string> {
+  return invoke<string>("ping");
+}
+
 export async function healthCheck(): Promise<DaemonStatus> {
   return invoke<DaemonStatus>("health_check");
 }
@@ -113,8 +123,9 @@ export async function createSession(
   model: string,
   rows: number,
   cols: number,
+  cwd?: string,
 ): Promise<Session> {
-  return invoke<Session>("create_session", { name, model, rows, cols });
+  return invoke<Session>("create_session", { name, model, rows, cols, cwd });
 }
 
 export async function destroySession(sessionId: string): Promise<void> {
@@ -154,6 +165,53 @@ export async function setApiKey(key: string): Promise<void> {
 
 export async function deleteApiKey(): Promise<void> {
   return invoke<void>("delete_api_key");
+}
+
+// ── Config commands ──
+
+export interface UiConfig {
+  theme: string;
+  zoom_level: number;
+  show_tool_calls: boolean;
+  user_name?: string;
+  ai_name?: string;
+}
+
+export interface KoboConfig {
+  version: number;
+  provider: string;
+  auth_method: "cli" | "api_key";
+  default_model: string;
+  setup_complete: boolean;
+  ui: UiConfig;
+}
+
+export async function getConfig(): Promise<KoboConfig> {
+  return invoke<KoboConfig>("get_config");
+}
+
+export async function updateConfig(config: KoboConfig): Promise<void> {
+  return invoke<void>("update_config", { config });
+}
+
+export async function completeSetup(): Promise<void> {
+  return invoke<void>("complete_setup");
+}
+
+export async function isSetupComplete(): Promise<boolean> {
+  return invoke<boolean>("is_setup_complete");
+}
+
+export async function checkCliAuth(): Promise<boolean> {
+  return invoke<boolean>("check_cli_auth");
+}
+
+export async function checkCliInstalled(): Promise<string | null> {
+  return invoke<string | null>("check_cli_installed");
+}
+
+export async function getUserDisplayName(): Promise<string> {
+  return invoke<string>("get_user_display_name");
 }
 
 // ── Versioning commands ──
@@ -199,6 +257,63 @@ export async function workspaceChanges(
   return invoke<DiffSummary>("workspace_changes", { sessionId });
 }
 
+// ── Git commands ──
+
+export async function gitStatus(sessionId: string): Promise<GitStatus> {
+  return invoke<GitStatus>("git_status", { sessionId });
+}
+
+export async function gitFileDiff(
+  sessionId: string,
+  filePath: string,
+  staged: boolean,
+): Promise<string> {
+  return invoke<string>("git_file_diff", { sessionId, filePath, staged });
+}
+
+export async function gitStageFile(
+  sessionId: string,
+  filePath: string,
+): Promise<void> {
+  return invoke<void>("git_stage_file", { sessionId, filePath });
+}
+
+export async function gitUnstageFile(
+  sessionId: string,
+  filePath: string,
+): Promise<void> {
+  return invoke<void>("git_unstage_file", { sessionId, filePath });
+}
+
+export async function gitStageFiles(
+  sessionId: string,
+  filePaths: string[],
+): Promise<void> {
+  return invoke<void>("git_stage_files", { sessionId, filePaths });
+}
+
+export async function gitUnstageFiles(
+  sessionId: string,
+  filePaths: string[],
+): Promise<void> {
+  return invoke<void>("git_unstage_files", { sessionId, filePaths });
+}
+
+export async function gitStageHunk(
+  sessionId: string,
+  filePath: string,
+  hunkIndex: number,
+): Promise<void> {
+  return invoke<void>("git_stage_hunk", { sessionId, filePath, hunkIndex });
+}
+
+export async function gitCommit(
+  sessionId: string,
+  message: string,
+): Promise<void> {
+  return invoke<void>("git_commit", { sessionId, message });
+}
+
 // ── SSE bridge ──
 
 /**
@@ -241,6 +356,18 @@ export async function getMessages(
 
 export async function cancelResponse(sessionId: string): Promise<void> {
   return invoke<void>("cancel_response", { sessionId });
+}
+
+/**
+ * Import Claude CLI history for a session's working directory.
+ * Returns messages from Claude CLI sessions in that folder.
+ */
+export async function importHistory(
+  sessionId: string,
+  limit?: number,
+  allSessions?: boolean,
+): Promise<Message[]> {
+  return invoke<Message[]>("import_history", { sessionId, limit, allSessions });
 }
 
 /**

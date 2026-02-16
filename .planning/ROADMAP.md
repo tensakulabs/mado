@@ -18,6 +18,8 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Versioning** - Local git repos with save, restore, and diff
 - [x] **Phase 5: Change Indicators** - Real-time per-pane file change tracking
 - [x] **Phase 6: Polish** - Command palette, keyboard shortcuts, and UX refinements
+- [ ] **Phase 7: Git View** - Lazygit-style full UI for staging, diffs, and commits
+- [ ] **Phase 8: Session Management** - View, filter, and clean up Claude CLI sessions across projects
 
 ## Phase Details
 
@@ -115,6 +117,41 @@ Plans:
 - [x] 06-02: Status bar with model + connection status (Wave 2)
 - [x] 06-03: Contextual hints + Home button + vocabulary updates (Wave 3)
 
+### Phase 7: Git View
+**Goal**: Users get a full lazygit-style interface when clicking [+ -] indicators -- view diffs, stage files, and commit directly from the UI
+**Depends on**: Phase 5 (Change Indicators)
+**Requirements**: GIT-01 (file list), GIT-02 (diff view), GIT-03 (staging), GIT-04 (commit)
+**Success Criteria** (what must be TRUE):
+  1. User clicks [+ -] indicator and sees a full-screen git view showing staged and unstaged files
+  2. User can select a file and see its diff (added/removed lines with syntax highlighting)
+  3. User can stage/unstage individual files (and optionally individual hunks)
+  4. User can write a commit message and commit directly from the UI
+  5. User can press back/Escape to return to the chat view
+**Execution**: SWARM — Plans 07-01 (backend) and 07-02 (frontend) are independent and run in parallel
+**Plans**: 3 plans (Wave 1: 07-01 + 07-02 parallel, Wave 2: 07-03)
+
+Plans:
+- [ ] 07-01: Backend git IPC commands (status, diff, add, reset, commit) — Wave 1
+- [ ] 07-02: GitView component with file list and diff viewer — Wave 1 (parallel with 07-01)
+- [ ] 07-03: Staging controls and commit UI — Wave 2 (depends on 07-01 + 07-02)
+
+### Phase 8: Session Management
+**Goal**: Users can view, filter, and clean up Claude CLI sessions across all projects with trash-based deletion
+**Depends on**: Phase 6 (core app complete)
+**Requirements**: SESSION-01, SESSION-02, SESSION-03, SESSION-04, SESSION-05
+**Success Criteria** (what must be TRUE):
+  1. User can see all Claude sessions grouped by project with metadata (date, size, message count)
+  2. User can filter sessions by project, date range, or size
+  3. User can select multiple sessions and move them to Trash (recoverable)
+  4. User can view a session's transcript in a read-only viewer
+  5. User can see total storage usage and cleanup suggestions
+**Plans**: 3 plans (Wave 1 -> Wave 2 -> Wave 3)
+
+Plans:
+- [ ] 08-01: claude_sessions.rs module in daemon (scan, metadata, trash via `trash` crate) — Wave 1
+- [ ] 08-02: IPC commands (claude_sessions_list, claude_sessions_delete, claude_sessions_transcript) — Wave 2
+- [ ] 08-03: SessionManager UI component with filters, bulk select, and transcript viewer — Wave 3
+
 ## Progress
 
 **Execution Order:**
@@ -128,3 +165,13 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 4. Versioning | 2/2 | Complete | 2026-02-12 |
 | 5. Change Indicators | 1/1 | Complete | 2026-02-12 |
 | 6. Polish | 3/3 | Complete | 2026-02-12 |
+| 7. Git View | 0/3 | Planned | - |
+| 8. Session Management | 0/3 | Planned | - |
+
+## Parking Lot
+
+Features mentioned but not yet scoped:
+
+- **Skills** — Claude Code skill system integration (TBD)
+- **Agents** — Multi-agent capabilities (TBD)
+- **Plugins** — Plugin architecture for extensibility (TBD)

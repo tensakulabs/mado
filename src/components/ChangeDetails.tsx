@@ -44,9 +44,9 @@ export function ChangeDetails({
     return (
       <div
         ref={ref}
-        className="absolute top-full left-0 z-50 mt-1 rounded-md border border-gray-700/50 bg-[#0f1629] p-3 shadow-xl"
+        className="absolute top-full left-0 z-50 mt-1 rounded-md border border-theme-primary bg-theme-secondary p-4 shadow-xl"
       >
-        <p className="text-xs text-gray-500">No changes detected.</p>
+        <p className="text-sm text-theme-muted">No changes detected.</p>
       </div>
     );
   }
@@ -54,29 +54,29 @@ export function ChangeDetails({
   return (
     <div
       ref={ref}
-      className="absolute top-full left-0 z-50 mt-1 w-72 max-h-64 overflow-y-auto rounded-md border border-gray-700/50 bg-[#0f1629] shadow-xl"
+      className="absolute top-full left-0 z-50 mt-1 w-80 max-h-72 overflow-y-auto rounded-md border border-theme-primary bg-theme-secondary shadow-xl"
     >
       {/* Header */}
-      <div className="sticky top-0 flex items-center justify-between border-b border-gray-700/30 bg-[#0f1629] px-3 py-1.5">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-medium text-gray-300">Changes</span>
+      <div className="sticky top-0 flex items-center justify-between border-b border-theme-secondary bg-theme-secondary px-3 py-2">
+        <div className="flex items-center gap-3 text-sm">
+          <span className="font-medium text-theme-secondary">Changes</span>
           <span className="font-mono text-green-500">+{totalInsertions}</span>
           <span className="font-mono text-red-500">-{totalDeletions}</span>
         </div>
-        <span className="text-[10px] text-gray-600">
+        <span className="text-xs text-theme-muted">
           {files.length} file{files.length !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* File list */}
-      <div className="p-1">
+      <div className="p-2">
         {files.map((file) => (
           <div
             key={file.path}
-            className="flex items-center gap-2 rounded px-2 py-0.5 text-[11px] hover:bg-gray-800/50"
+            className="flex items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-theme-tertiary"
           >
             <span
-              className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${
+              className={`h-2 w-2 flex-shrink-0 rounded-full ${
                 file.status === "added"
                   ? "bg-green-500"
                   : file.status === "deleted"
@@ -86,16 +86,16 @@ export function ChangeDetails({
                       : "bg-yellow-500"
               }`}
             />
-            <span className="flex-1 truncate font-mono text-gray-400">
+            <span className="flex-1 truncate font-mono text-theme-muted">
               {file.path}
             </span>
             {file.insertions > 0 && (
-              <span className="font-mono text-green-600">
+              <span className="font-mono text-green-500">
                 +{file.insertions}
               </span>
             )}
             {file.deletions > 0 && (
-              <span className="font-mono text-red-600">
+              <span className="font-mono text-red-500">
                 -{file.deletions}
               </span>
             )}

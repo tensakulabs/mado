@@ -73,13 +73,13 @@ export function Timeline({ sessionId, onClose }: TimelineProps) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-[#0f1629] border-l border-gray-700/50">
+    <div className="flex h-full flex-col bg-theme-secondary border-l border-theme-primary">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-700/50 px-3 py-2">
-        <h3 className="text-sm font-medium text-gray-300">Timeline</h3>
+      <div className="flex items-center justify-between border-b border-theme-primary px-3 py-2">
+        <h3 className="text-sm font-medium text-theme-secondary">Timeline</h3>
         <button
           onClick={onClose}
-          className="rounded px-1.5 py-0.5 text-xs text-gray-500 hover:bg-gray-800 hover:text-gray-300"
+          className="rounded px-2 py-1 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-secondary"
         >
           Close
         </button>
@@ -87,7 +87,7 @@ export function Timeline({ sessionId, onClose }: TimelineProps) {
 
       {/* Error */}
       {error && (
-        <div className="mx-2 mt-2 rounded bg-red-900/30 px-2 py-1 text-xs text-red-300">
+        <div className="mx-2 mt-2 rounded bg-red-900/30 px-3 py-2 text-sm text-red-300">
           {error}
           <button
             onClick={clearError}
@@ -101,13 +101,13 @@ export function Timeline({ sessionId, onClose }: TimelineProps) {
       {/* Milestones list */}
       <div className="flex-1 overflow-y-auto p-2">
         {isLoading && milestones.length === 0 && (
-          <div className="py-4 text-center text-xs text-gray-500">
+          <div className="py-4 text-center text-sm text-theme-muted">
             Loading milestones...
           </div>
         )}
 
         {!isLoading && milestones.length === 0 && (
-          <div className="py-4 text-center text-xs text-gray-500">
+          <div className="py-4 text-center text-sm text-theme-muted">
             No milestones yet. Use the save button to create one.
           </div>
         )}
@@ -169,20 +169,20 @@ function MilestoneEntry({
   onRestoreCancel,
 }: MilestoneEntryProps) {
   return (
-    <div className="group rounded border border-gray-700/30 bg-gray-900/30 p-2">
+    <div className="group rounded border border-theme-primary bg-theme-tertiary p-2.5">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {isLatest && (
-              <span className="rounded bg-blue-900/50 px-1 py-0.5 text-[10px] font-medium text-blue-300">
+              <span className="rounded bg-blue-900/50 px-1.5 py-0.5 text-xs font-medium text-blue-300">
                 latest
               </span>
             )}
-            <span className="truncate text-xs text-gray-300">
+            <span className="truncate text-sm text-theme-secondary">
               {milestone.message}
             </span>
           </div>
-          <div className="mt-0.5 flex items-center gap-2 text-[10px] text-gray-600">
+          <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-theme-muted">
             <span className="font-mono">{milestone.oid.slice(0, 7)}</span>
             <span>{formatTimestamp(milestone.timestamp)}</span>
             {milestone.files_changed > 0 && (
@@ -193,10 +193,10 @@ function MilestoneEntry({
             )}
             {(milestone.insertions > 0 || milestone.deletions > 0) && (
               <span className="font-mono">
-                <span className="text-green-600">
+                <span className="text-green-500">
                   +{milestone.insertions}
                 </span>{" "}
-                <span className="text-red-600">-{milestone.deletions}</span>
+                <span className="text-red-500">-{milestone.deletions}</span>
               </span>
             )}
           </div>
@@ -204,11 +204,11 @@ function MilestoneEntry({
       </div>
 
       {/* Actions */}
-      <div className="mt-1 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className="mt-2 flex items-center gap-2 opacity-0 transition-opacity group-hover:opacity-100">
         {onDiff && (
           <button
             onClick={onDiff}
-            className="rounded px-1.5 py-0.5 text-[10px] text-gray-500 hover:bg-gray-800 hover:text-gray-300"
+            className="rounded px-2 py-1 text-xs text-theme-muted hover:bg-theme-secondary hover:text-theme-secondary"
           >
             diff
           </button>
@@ -216,23 +216,23 @@ function MilestoneEntry({
         {!isLatest && !isRestoreConfirming && (
           <button
             onClick={onRestore}
-            className="rounded px-1.5 py-0.5 text-[10px] text-gray-500 hover:bg-yellow-900/30 hover:text-yellow-300"
+            className="rounded px-2 py-1 text-xs text-theme-muted hover:bg-yellow-900/30 hover:text-yellow-300"
           >
             restore
           </button>
         )}
         {isRestoreConfirming && (
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-yellow-400">Restore?</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-yellow-400">Restore?</span>
             <button
               onClick={onRestoreConfirm}
-              className="rounded bg-yellow-600/30 px-1.5 py-0.5 text-[10px] text-yellow-300 hover:bg-yellow-600/50"
+              className="rounded bg-yellow-600/30 px-2 py-1 text-xs text-yellow-300 hover:bg-yellow-600/50"
             >
               Yes
             </button>
             <button
               onClick={onRestoreCancel}
-              className="rounded px-1.5 py-0.5 text-[10px] text-gray-500 hover:text-gray-300"
+              className="rounded px-2 py-1 text-xs text-theme-muted hover:text-theme-secondary"
             >
               No
             </button>
@@ -250,32 +250,34 @@ interface DiffPanelProps {
 
 function DiffPanel({ diff, onClose }: DiffPanelProps) {
   return (
-    <div className="max-h-[40%] border-t border-gray-700/50 overflow-y-auto">
-      <div className="flex items-center justify-between border-b border-gray-700/30 px-3 py-1.5">
-        <div className="flex items-center gap-2 text-xs">
-          <span className="font-medium text-gray-300">Diff</span>
-          <span className="font-mono text-[10px] text-green-500">
+    <div className="flex max-h-[40%] flex-col border-t border-theme-primary">
+      {/* Sticky header */}
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-theme-secondary bg-theme-secondary px-3 py-2">
+        <div className="flex items-center gap-3 text-sm">
+          <span className="font-medium text-theme-secondary">Diff</span>
+          <span className="font-mono text-xs text-green-500">
             +{diff.total_insertions}
           </span>
-          <span className="font-mono text-[10px] text-red-500">
+          <span className="font-mono text-xs text-red-500">
             -{diff.total_deletions}
           </span>
         </div>
         <button
           onClick={onClose}
-          className="text-xs text-gray-500 hover:text-gray-300"
+          className="rounded px-2 py-1 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-secondary"
         >
           close
         </button>
       </div>
-      <div className="p-2 space-y-0.5">
+      {/* Scrollable file list */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-1">
         {diff.files.map((file) => (
           <div
             key={file.path}
-            className="flex items-center gap-2 rounded px-2 py-0.5 text-[11px] hover:bg-gray-800/50"
+            className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-theme-tertiary"
           >
             <span
-              className={`w-1.5 h-1.5 rounded-full ${
+              className={`w-2 h-2 rounded-full ${
                 file.status === "added"
                   ? "bg-green-500"
                   : file.status === "deleted"
@@ -285,11 +287,11 @@ function DiffPanel({ diff, onClose }: DiffPanelProps) {
                       : "bg-yellow-500"
               }`}
             />
-            <span className="flex-1 truncate font-mono text-gray-400">
+            <span className="flex-1 truncate font-mono text-theme-muted">
               {file.path}
             </span>
-            <span className="font-mono text-green-600">+{file.insertions}</span>
-            <span className="font-mono text-red-600">-{file.deletions}</span>
+            <span className="font-mono text-green-500">+{file.insertions}</span>
+            <span className="font-mono text-red-500">-{file.deletions}</span>
           </div>
         ))}
       </div>

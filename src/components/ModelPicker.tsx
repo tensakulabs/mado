@@ -40,7 +40,7 @@ export function ModelPicker() {
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-gray-400 hover:bg-gray-700/50 hover:text-gray-200"
+        className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
         title="Select model"
       >
         <span className="font-medium">
@@ -60,7 +60,7 @@ export function ModelPicker() {
       </button>
 
       {isOpen && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-gray-700/50 bg-[#16213e] py-1 shadow-xl">
+        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-theme-primary bg-theme-tertiary py-1 shadow-xl">
           {models.map((model) => (
             <button
               key={model.id}
@@ -68,14 +68,14 @@ export function ModelPicker() {
                 setDefaultModel(model.id);
                 setIsOpen(false);
               }}
-              className={`flex w-full flex-col px-3 py-2 text-left text-xs hover:bg-gray-700/30 ${
+              className={`flex w-full flex-col px-3 py-2 text-left text-xs hover:bg-theme-secondary ${
                 model.id === defaultModel
                   ? "bg-blue-900/20 text-blue-300"
-                  : "text-gray-300"
+                  : "text-theme-secondary"
               }`}
             >
               <span className="font-medium">{model.name}</span>
-              <span className="mt-0.5 text-gray-500">{model.description}</span>
+              <span className="mt-0.5 text-theme-muted">{model.description}</span>
             </button>
           ))}
         </div>
