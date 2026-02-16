@@ -4,6 +4,7 @@ import { usePaneStore, type PaneNode } from "../stores/panes";
 import { useSessionStore } from "../stores/sessions";
 import { gitStatus, type FileDiff } from "../lib/ipc";
 import { CommitModal } from "./git/CommitModal";
+import { GridResizePopup } from "./GridResizePopup";
 
 interface ToolbarProps {
   onOpenCommandPalette: () => void;
@@ -244,6 +245,7 @@ export function Toolbar({ onOpenCommandPalette }: ToolbarProps) {
           >
             Split V
           </button>
+          <GridResizePopup />
           {closedPanes.length > 0 && (
             <>
               <div className="mx-1 h-3 w-px bg-theme-tertiary" />
