@@ -504,6 +504,47 @@ impl DaemonClient {
         }
     }
 
+    /// Commit staged files with a message.
+    pub async fn git_commit(
+        &self,
+        session_id: &str,
+        message: &str,
+    ) -> Result<String, ClientError> {
+        let body_json = serde_json::json!({ "message": message });
+        let body = self
+            .post(
+                &format!("/sessions/{}/git/commit", session_id),
+                &body_json,
+            )
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::GitCommitResult { oid } => Ok(oid),
+            DaemonResponse::Pong => Ok(String::new()),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Get git commit log.
+    pub async fn git_log(
+        &self,
+        session_id: &str,
+        limit: Option<usize>,
+    ) -> Result<Vec<crate::types::GitLogEntry>, ClientError> {
+        let url = match limit {
+            Some(n) => format!("/sessions/{}/git/log?limit={}", session_id, n),
+            None => format!("/sessions/{}/git/log", session_id),
+        };
+        let body = self.get(&url).await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::GitLogResult { entries } => Ok(entries),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
     // ── Chat mode methods ──
 
     /// Send a message to a session (chat mode).

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{DaemonStatus, DiffSummary, GitStatus, Message, Milestone, Session, SessionId};
+use crate::types::{DaemonStatus, DiffSummary, GitLogEntry, GitStatus, Message, Milestone, Session, SessionId};
 
 /// Requests that can be sent to the daemon.
 #[derive(Debug, Serialize, Deserialize)]
@@ -62,6 +62,10 @@ pub enum DaemonResponse {
     GitStatusResult { status: GitStatus },
     /// Unified diff content for a single file.
     FileDiffContent { diff: String },
+    /// Git commit log entries.
+    GitLogResult { entries: Vec<GitLogEntry> },
+    /// Git commit succeeded.
+    GitCommitResult { oid: String },
 
     // Chat mode responses
     /// Full conversation history.

@@ -55,6 +55,13 @@ export interface GitStatus {
   unstaged: FileDiff[];
 }
 
+export interface GitLogEntry {
+  oid: string;
+  message: string;
+  author: string;
+  timestamp: string;
+}
+
 // ── Chat mode types ──
 
 export type MessageRole = "user" | "assistant" | "system";
@@ -310,8 +317,38 @@ export async function gitStageHunk(
 export async function gitCommit(
   sessionId: string,
   message: string,
-): Promise<void> {
-  return invoke<void>("git_commit", { sessionId, message });
+): Promise<string> {
+  return invoke<string>("git_commit", { sessionId, message });
+}
+
+/**
+ * Get the git commit log for a session's workspace.
+ * Returns recent commit entries.
+ */
+export async function gitLog(
+  sessionId: string,
+  limit?: number,
+): Promise<GitLogEntry[]> {
+  return invoke<GitLogEntry[]>("git_log", { sessionId, limit });
+}
+
+/**
+ * Get diff stats from git status.
+ * Wraps gitStatus to provide aggregate file diff statistics.
+ */
+export async function gitDiffStat(
+  sessionId: string,
+): Promise<{ totalFiles: number; totalInsertions: number; totalDeletions: number; files: FileDiff[] }> {
+  const status = await gitStatus(sessionId);
+  const allFiles = [...status.staged, ...status.unstaged];
+  const totalInsertions = allFiles.reduce((sum, f) => sum + f.insertions, 0);
+  const totalDeletions = allFiles.reduce((sum, f) => sum + f.deletions, 0);
+  return {
+    totalFiles: allFiles.length,
+    totalInsertions,
+    totalDeletions,
+    files: allFiles,
+  };
 }
 
 // ── SSE bridge ──

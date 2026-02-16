@@ -57,6 +57,8 @@ pub fn run() {
             commands::git_stage_files,
             commands::git_unstage_files,
             commands::git_stage_hunk,
+            commands::git_commit,
+            commands::git_log,
             // Chat mode commands.
             commands::send_message,
             commands::get_messages,
