@@ -1,7 +1,9 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState, useEffect } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import { usePaneStore, type PaneNode } from "../stores/panes";
 import { useSessionStore } from "../stores/sessions";
+import { gitStatus, type FileDiff } from "../lib/ipc";
+import { CommitModal } from "./git/CommitModal";
 
 interface ToolbarProps {
   onOpenCommandPalette: () => void;
@@ -31,6 +33,71 @@ export function Toolbar({ onOpenCommandPalette }: ToolbarProps) {
   const initSinglePane = usePaneStore((s) => s.initSinglePane);
   const createSession = useSessionStore((s) => s.createSession);
   const defaultModel = useSessionStore((s) => s.defaultModel);
+
+  // ── Git change indicator + commit modal state ──
+  const [hasUncommittedChanges, setHasUncommittedChanges] = useState(false);
+  const [stagedFiles, setStagedFiles] = useState<FileDiff[]>([]);
+  const [unstagedFiles, setUnstagedFiles] = useState<FileDiff[]>([]);
+  const [isCommitModalOpen, setIsCommitModalOpen] = useState(false);
+
+  // Find the active session ID for git operations.
+  const activeSessionId = useMemo(() => {
+    if (!activePaneId || !root) return null;
+    const findLeaf = (node: PaneNode): string | null => {
+      if (node.type === "leaf") {
+        return node.id === activePaneId ? node.sessionId ?? null : null;
+      }
+      return findLeaf(node.children[0]) ?? findLeaf(node.children[1]);
+    };
+    return findLeaf(root);
+  }, [activePaneId, root]);
+
+  // Poll git status to detect uncommitted changes.
+  useEffect(() => {
+    if (!activeSessionId) {
+      setHasUncommittedChanges(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkStatus = async () => {
+      try {
+        const status = await gitStatus(activeSessionId);
+        if (!cancelled) {
+          const totalChanges = status.staged.length + status.unstaged.length;
+          setHasUncommittedChanges(totalChanges > 0);
+          setStagedFiles(status.staged);
+          setUnstagedFiles(status.unstaged);
+        }
+      } catch {
+        // Silently ignore -- git status may fail if no repo.
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [activeSessionId]);
+
+  const handleOpenCommitModal = useCallback(() => {
+    setIsCommitModalOpen(true);
+  }, []);
+
+  const handleCloseCommitModal = useCallback(() => {
+    setIsCommitModalOpen(false);
+  }, []);
+
+  const handleCommitComplete = useCallback(() => {
+    // Refresh git status after commit.
+    setHasUncommittedChanges(false);
+    setStagedFiles([]);
+    setUnstagedFiles([]);
+  }, []);
 
   // Memoize pane count to avoid infinite loop.
   const paneCount = useMemo(() => countLeaves(root), [root]);
@@ -202,14 +269,50 @@ export function Toolbar({ onOpenCommandPalette }: ToolbarProps) {
         <div />
       )}
 
-      {/* Right: info */}
+      {/* Right: info + save button */}
       <div className="flex items-center gap-2">
         {hasConversation && (
-          <span className="text-xs text-theme-muted">
-            {paneCount} conversation{paneCount !== 1 ? "s" : ""}
-          </span>
+          <>
+            {/* Save/Commit button with change indicator */}
+            <button
+              onClick={handleOpenCommitModal}
+              disabled={!hasUncommittedChanges}
+              className={`relative rounded px-2 py-0.5 text-xs transition-colors ${
+                hasUncommittedChanges
+                  ? "text-green-400 hover:bg-green-900/30 hover:text-green-300"
+                  : "text-theme-muted cursor-default opacity-50"
+              }`}
+              title={
+                hasUncommittedChanges
+                  ? `Commit changes (${stagedFiles.length + unstagedFiles.length} files)`
+                  : "No uncommitted changes"
+              }
+            >
+              {/* Green dot indicator */}
+              {hasUncommittedChanges && (
+                <span className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+              )}
+              Save
+            </button>
+            <div className="mx-1 h-3 w-px bg-theme-tertiary" />
+            <span className="text-xs text-theme-muted">
+              {paneCount} conversation{paneCount !== 1 ? "s" : ""}
+            </span>
+          </>
         )}
       </div>
+
+      {/* Commit Modal */}
+      {activeSessionId && (
+        <CommitModal
+          isOpen={isCommitModalOpen}
+          onClose={handleCloseCommitModal}
+          sessionId={activeSessionId}
+          stagedFiles={stagedFiles}
+          unstagedFiles={unstagedFiles}
+          onCommitComplete={handleCommitComplete}
+        />
+      )}
     </div>
   );
 }

@@ -114,6 +114,15 @@ pub struct GitStatus {
     pub unstaged: Vec<FileDiff>,
 }
 
+/// A single entry in the git commit log.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GitLogEntry {
+    pub oid: String,
+    pub message: String,
+    pub author: String,
+    pub timestamp: String,
+}
+
 /// Terminal/PTY size in rows and columns.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub struct PtySize {

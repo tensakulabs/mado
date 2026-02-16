@@ -503,6 +503,42 @@ pub async fn git_stage_hunk(
         .map_err(|e| e.to_string())
 }
 
+/// Commit staged files with a message.
+#[tauri::command]
+pub async fn git_commit(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    message: String,
+) -> Result<String, String> {
+    let guard = state.client.read().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .git_commit(&session_id, &message)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get git commit log for a session's workspace.
+#[tauri::command]
+pub async fn git_log(
+    state: State<'_, DaemonState>,
+    session_id: String,
+    limit: Option<usize>,
+) -> Result<Vec<mado_core::types::GitLogEntry>, String> {
+    let guard = state.client.read().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .git_log(&session_id, limit)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// List available AI models.
 #[tauri::command]
 pub fn list_models() -> Vec<ModelInfo> {
