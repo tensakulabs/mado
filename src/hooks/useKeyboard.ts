@@ -5,6 +5,7 @@ import { useUiStore } from "../stores/ui";
 
 interface UseKeyboardOptions {
   onOpenCommandPalette?: () => void;
+  onOpenLayoutModal?: () => void;
 }
 
 /**
@@ -17,6 +18,7 @@ interface UseKeyboardOptions {
  * - x -> close current pane
  * - z -> undo close
  * - c -> new conversation
+ * - l -> open layout modal
  *
  * Global shortcuts (no prefix):
  * - Cmd+K / Ctrl+K -> open command palette
@@ -63,6 +65,13 @@ export function useKeyboard(options: UseKeyboardOptions = {}) {
         return;
       }
 
+      // Cmd+L / Ctrl+L -> open layout modal.
+      if ((e.metaKey || e.ctrlKey) && e.key === "l") {
+        e.preventDefault();
+        options.onOpenLayoutModal?.();
+        return;
+      }
+
       // Cmd+G / Ctrl+G -> toggle GitView for current session.
       if ((e.metaKey || e.ctrlKey) && e.key === "g") {
         e.preventDefault();
@@ -79,30 +88,7 @@ export function useKeyboard(options: UseKeyboardOptions = {}) {
         return;
       }
 
-      // Ctrl+Plus / Ctrl+Equal -> zoom in.
-      if (e.ctrlKey && (e.key === "+" || e.key === "=")) {
-        e.preventDefault();
-        const root = document.documentElement;
-        const currentZoom = parseFloat(root.style.fontSize || "16") || 16;
-        root.style.fontSize = `${Math.min(currentZoom + 2, 24)}px`;
-        return;
-      }
-
-      // Ctrl+Minus -> zoom out.
-      if (e.ctrlKey && e.key === "-") {
-        e.preventDefault();
-        const root = document.documentElement;
-        const currentZoom = parseFloat(root.style.fontSize || "16") || 16;
-        root.style.fontSize = `${Math.max(currentZoom - 2, 10)}px`;
-        return;
-      }
-
-      // Ctrl+0 -> reset zoom.
-      if (e.ctrlKey && e.key === "0") {
-        e.preventDefault();
-        document.documentElement.style.fontSize = "16px";
-        return;
-      }
+      // Zoom handled by native menu (⌘+/⌘-/⌘0) via useMenuEvents.
 
       // Ctrl+B activates prefix mode.
       if (e.ctrlKey && e.key === "b") {
@@ -161,6 +147,10 @@ export function useKeyboard(options: UseKeyboardOptions = {}) {
           case "c": // New conversation
             e.preventDefault();
             handleSplit("horizontal");
+            break;
+          case "l": // Open layout modal
+            e.preventDefault();
+            options.onOpenLayoutModal?.();
             break;
         }
       }

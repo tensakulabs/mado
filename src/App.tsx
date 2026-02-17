@@ -10,16 +10,15 @@ import {
 import { ApiKeySetup } from "./components/ApiKeySetup";
 import { CommandPalette } from "./components/CommandPalette";
 import { StatusBar } from "./components/StatusBar";
-import { ContextualHints } from "./components/ContextualHints";
 import { Settings } from "./components/Settings";
 import { usePaneStore } from "./stores/panes";
 import { useSessionStore } from "./stores/sessions";
 import { useUiStore } from "./stores/ui";
 import { Layout } from "./components/Layout";
-import { SessionSidebar } from "./components/SessionSidebar";
 import { Toolbar } from "./components/Toolbar";
+import { LayoutModal } from "./components/LayoutModal";
 import { useKeyboard } from "./hooks/useKeyboard";
-import { useResizableSidebar } from "./hooks/useResizableSidebar";
+import { useMenuEvents } from "./hooks/useMenuEvents";
 
 type ConnectionState = "connecting" | "connected" | "disconnected";
 
@@ -31,16 +30,16 @@ function friendlyError(error: string): { title: string; detail: string; action?:
 
   if (err.includes("no such file or directory") || err.includes("socket")) {
     return {
-      title: "Cannot connect to Kobo",
-      detail: "The Kobo daemon isn't running. Click Reconnect to start it.",
+      title: "Cannot connect to Mado",
+      detail: "The Mado daemon isn't running. Click Reconnect to start it.",
       action: "reconnect",
     };
   }
 
-  if (err.includes("failed to start daemon") || err.includes("could not find kobo-daemon")) {
+  if (err.includes("failed to start daemon") || err.includes("could not find mado-daemon")) {
     return {
       title: "Daemon not found",
-      detail: "The Kobo daemon binary is missing. Try rebuilding the app.",
+      detail: "The Mado daemon binary is missing. Try rebuilding the app.",
     };
   }
 
@@ -55,7 +54,7 @@ function friendlyError(error: string): { title: string; detail: string; action?:
   if (err.includes("permission denied")) {
     return {
       title: "Permission denied",
-      detail: "Check that you have permission to access the Kobo socket.",
+      detail: "Check that you have permission to access the Mado socket.",
     };
   }
 
@@ -77,17 +76,24 @@ function App() {
   const [needsApiKey, setNeedsApiKey] = useState<boolean | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [layoutModalOpen, setLayoutModalOpen] = useState(false);
 
-  const root = usePaneStore((s) => s.root);
+  const columns = usePaneStore((s) => s.columns);
   const initSinglePane = usePaneStore((s) => s.initSinglePane);
   const fetchSessions = useSessionStore((s) => s.fetchSessions);
   const loadUiConfig = useUiStore((s) => s.loadFromConfig);
 
-  const { width: sidebarWidth, handleMouseDown: onResizeMouseDown, isResizing } = useResizableSidebar();
-
   // Activate keyboard shortcuts with command palette integration.
   useKeyboard({
     onOpenCommandPalette: () => setCommandPaletteOpen(true),
+    onOpenLayoutModal: () => setLayoutModalOpen(true),
+  });
+
+  // Listen for native menu bar events.
+  useMenuEvents({
+    onOpenCommandPalette: () => setCommandPaletteOpen(true),
+    onOpenLayoutModal: () => setLayoutModalOpen(true),
+    onOpenSettings: () => setSettingsOpen(true),
   });
 
   // Load UI config (theme, font size, zoom) when daemon connects.
@@ -115,8 +121,8 @@ function App() {
   // Also fetches existing sessions from the daemon so they are available in the store.
   const ensureInitialPane = useCallback(() => {
     // Check if already initialized via store getter (avoids stale closure).
-    const currentRoot = usePaneStore.getState().root;
-    if (currentRoot) return; // Already initialized.
+    const currentColumns = usePaneStore.getState().columns;
+    if (currentColumns.length > 0) return; // Already initialized.
     // Fetch existing sessions from daemon so the store is populated.
     fetchSessions();
     // Create pane without session - welcome screen will handle session creation.
@@ -196,16 +202,22 @@ function App() {
     return (
       <Settings
         onBack={() => setSettingsOpen(false)}
-        onResetSetup={() => {}}
+        onResetSetup={() => {
+          setSettingsOpen(false);
+          setNeedsApiKey(true);
+        }}
       />
     );
   }
 
   // Show full multi-pane UI when connected with panes.
-  if (connectionState === "connected" && root) {
+  if (connectionState === "connected" && columns.length > 0) {
     return (
       <div className="flex h-screen w-screen flex-col overflow-hidden">
-        <Toolbar onOpenCommandPalette={() => setCommandPaletteOpen(true)} />
+        <Toolbar
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+          onOpenLayoutModal={() => setLayoutModalOpen(true)}
+        />
         {shellFallback && (
           <div className="flex items-center justify-between bg-yellow-900/30 px-3 py-1 text-xs text-yellow-300">
             <span>
@@ -227,23 +239,8 @@ function App() {
             </button>
           </div>
         )}
-        <div className="flex flex-1 min-h-0">
-          <div
-            className="relative flex-shrink-0"
-            style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}
-          >
-            <SessionSidebar />
-            {/* Resize drag handle */}
-            <div
-              onMouseDown={onResizeMouseDown}
-              className={`absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 transition-colors ${
-                isResizing ? "bg-blue-500/50" : "hover:bg-blue-500/30"
-              }`}
-            />
-          </div>
-          <div className="flex-1 min-h-0">
-            <Layout />
-          </div>
+        <div className="flex-1 min-h-0">
+          <Layout />
         </div>
         <StatusBar
           version={daemonInfo?.version}
@@ -260,8 +257,14 @@ function App() {
           }}
         />
 
-        {/* Contextual hints for new users (UX-08, UX-09) */}
-        <ContextualHints enabled={true} />
+        {/* Layout modal overlay */}
+        <LayoutModal
+          isOpen={layoutModalOpen}
+          onClose={() => setLayoutModalOpen(false)}
+        />
+
+        {/* Contextual hints disabled — welcome screen handles onboarding */}
+        {/* <ContextualHints enabled={true} /> */}
       </div>
     );
   }
@@ -282,7 +285,7 @@ function App() {
   return (
     <div className="flex h-screen w-screen flex-col items-center justify-center gap-8 p-8 bg-theme-primary">
       <div className="text-center">
-        <h1 className="text-4xl font-bold tracking-tight text-theme-primary">Kobo</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-theme-primary">Mado</h1>
         <p className="mt-2 text-sm text-theme-muted">
           Multi-pane AI conversations with persistence
         </p>
