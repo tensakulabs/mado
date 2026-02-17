@@ -88,6 +88,49 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **SESSION-04**: User can view a session's transcript in a read-only viewer
 - [ ] **SESSION-05**: User can see total storage usage and cleanup suggestions
 
+### MCP Skills
+
+- [ ] **MCP-01**: User can see all configured MCP servers with connection status
+- [ ] **MCP-02**: User can enable/disable MCP servers per session or globally
+- [ ] **MCP-03**: User can view tools provided by each MCP server with descriptions
+- [ ] **MCP-04**: User can edit MCP server configuration (env vars, args) via settings UI
+- [ ] **MCP-05**: User can search/filter MCP servers and tools by name or keyword
+
+### Agent Management
+
+- [ ] **AGENT-01**: User can see all available agents (built-in and custom)
+- [ ] **AGENT-02**: User can create custom agent with name, prompt, model, and tools
+- [ ] **AGENT-03**: User can edit or delete existing custom agent profiles
+- [ ] **AGENT-04**: User can launch an agent session into a pane with one click
+- [ ] **AGENT-05**: User can see which agent is running in each pane
+
+### Pane Enhancement
+
+- [ ] **PANE-01**: User can toggle pane zoom (fullscreen/restore) with Ctrl+B z
+- [ ] **PANE-02**: User can resize active pane via Ctrl+B Ctrl+arrows
+- [ ] **PANE-03**: User can swap active pane with sibling via Ctrl+B {/}
+- [ ] **PANE-04**: User can flash pane numbers and jump via Ctrl+B q + number
+
+### Search
+
+- [ ] **SEARCH-01**: User can open search bar in active conversation with Cmd+F
+- [ ] **SEARCH-02**: All matches highlighted in scrollback with auto-scroll to first match
+- [ ] **SEARCH-03**: User can navigate between matches with match counter display
+
+### Layout Enhancement
+
+- [ ] **LAYOUT-01**: Pane layout persists and restores exactly across app restarts
+- [ ] **LAYOUT-02**: User can cycle through layout presets with Ctrl+B space
+- [ ] **LAYOUT-03**: Equal/tiled layout preset makes all panes the same size
+
+### Windows
+
+- [ ] **WIN-01**: User can create new window with independent pane set
+- [ ] **WIN-02**: User can switch windows via Ctrl+B n/p and Ctrl+B 0-9
+- [ ] **WIN-03**: User can rename a window
+- [ ] **WIN-04**: User can see all windows in tab bar with active highlighted
+- [ ] **WIN-05**: User can close a window with confirmation for active conversations
+
 ### Platform
 
 - [ ] **PLAT-01**: App runs on macOS (Intel and Apple Silicon)
@@ -192,13 +235,38 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SESSION-03 | Phase 8 | Pending |
 | SESSION-04 | Phase 8 | Pending |
 | SESSION-05 | Phase 8 | Pending |
+| PANE-01 | Phase 11 | Pending |
+| PANE-02 | Phase 11 | Pending |
+| PANE-03 | Phase 11 | Pending |
+| PANE-04 | Phase 11 | Pending |
+| SEARCH-01 | Phase 12 | Pending |
+| SEARCH-02 | Phase 12 | Pending |
+| SEARCH-03 | Phase 12 | Pending |
+| LAYOUT-01 | Phase 13 | Pending |
+| LAYOUT-02 | Phase 13 | Pending |
+| LAYOUT-03 | Phase 13 | Pending |
+| WIN-01 | Phase 14 | Pending |
+| WIN-02 | Phase 14 | Pending |
+| WIN-03 | Phase 14 | Pending |
+| WIN-04 | Phase 14 | Pending |
+| WIN-05 | Phase 14 | Pending |
+| MCP-01 | Phase 9 | Pending |
+| MCP-02 | Phase 9 | Pending |
+| MCP-03 | Phase 9 | Pending |
+| MCP-04 | Phase 9 | Pending |
+| MCP-05 | Phase 9 | Pending |
+| AGENT-01 | Phase 10 | Pending |
+| AGENT-02 | Phase 10 | Pending |
+| AGENT-03 | Phase 10 | Pending |
+| AGENT-04 | Phase 10 | Pending |
+| AGENT-05 | Phase 10 | Pending |
 | PLAT-01 | Phase 1 | Pending |
 | PLAT-02 | Phase 1 | Pending |
 | PLAT-03 | Phase 2 | Pending |
 
 **Coverage:**
-- v1 requirements: 60 total
-- Mapped to phases: 60
+- v1 requirements: 85 total
+- Mapped to phases: 85
 - Unmapped: 0
 
 ---

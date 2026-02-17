@@ -20,6 +20,12 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 6: Polish** - Command palette, keyboard shortcuts, and UX refinements
 - [ ] **Phase 7: Git View** - Lazygit-style full UI for staging, diffs, and commits
 - [ ] **Phase 8: Session Management** - View, filter, and clean up Claude CLI sessions across projects
+- [ ] **Phase 9: MCP Skills** - Browse, configure, and manage MCP tool servers per session
+- [ ] **Phase 10: Agent Management** - View, create, and launch custom AI agents from the GUI
+- [ ] **Phase 11: Pane Enhancement** - Zoom toggle, keyboard resize, swap panes, select by number
+- [ ] **Phase 12: Search** - Find-in-conversation search with highlight and navigation
+- [ ] **Phase 13: Layout Enhancement** - Persistence across restarts, cycle presets, equal/tiled layout
+- [ ] **Phase 14: Windows** - Tab-like window groups for organizing conversations into workspaces
 
 ## Phase Details
 
@@ -152,6 +158,99 @@ Plans:
 - [ ] 08-02: IPC commands (claude_sessions_list, claude_sessions_delete, claude_sessions_transcript) — Wave 2
 - [ ] 08-03: SessionManager UI component with filters, bulk select, and transcript viewer — Wave 3
 
+### Phase 9: MCP Skills
+**Goal**: Users can browse, enable/disable, and configure MCP tool servers directly from the GUI -- see what tools are available, check server status, and adjust settings without editing config files
+**Depends on**: Phase 3 (Claude Integration)
+**Requirements**: MCP-01, MCP-02, MCP-03, MCP-04, MCP-05
+**Success Criteria** (what must be TRUE):
+  1. User can see a list of all configured MCP servers with their connection status (connected, error, disabled)
+  2. User can enable or disable an MCP server per session or globally and the change takes effect without restarting
+  3. User can view the tools provided by each connected MCP server with name and description
+  4. User can edit MCP server configuration (env vars, command args) through a settings UI
+  5. User can search/filter MCP servers and tools by name or keyword
+**Plans**: 3 plans (Wave 1 -> Wave 2 -> Wave 3)
+
+Plans:
+- [ ] 09-01: Backend MCP config reader (parse claude_desktop_config.json, query server status) — Wave 1
+- [ ] 09-02: IPC commands (mcp_list, mcp_toggle, mcp_tools, mcp_configure) — Wave 2
+- [ ] 09-03: MCP Manager UI component with server list, tool browser, and config editor — Wave 3
+
+### Phase 10: Agent Management
+**Goal**: Users can view available agents (built-in and custom), create custom agent profiles, and launch agent sessions into panes directly from the GUI
+**Depends on**: Phase 3 (Claude Integration), Phase 8 (Session Management)
+**Requirements**: AGENT-01, AGENT-02, AGENT-03, AGENT-04, AGENT-05
+**Success Criteria** (what must be TRUE):
+  1. User can see a list of all available agents (built-in types and custom agents from ~/.claude/custom-agents/)
+  2. User can create a new custom agent with name, system prompt, model selection, and allowed tools
+  3. User can edit or delete existing custom agent profiles
+  4. User can launch an agent session into a new or existing pane with one click
+  5. User can see which agent is running in each pane via a pane-level indicator
+**Plans**: 3 plans (Wave 1 -> Wave 2 -> Wave 3)
+
+Plans:
+- [ ] 10-01: Backend agent discovery (scan built-in + custom-agents directory, parse agent configs) — Wave 1
+- [ ] 10-02: IPC commands (agents_list, agent_create, agent_update, agent_delete, agent_launch) — Wave 2
+- [ ] 10-03: Agent Manager UI with agent browser, profile editor, and launch controls — Wave 3
+
+### Phase 11: Pane Enhancement
+**Goal**: Pane management reaches tmux parity -- users can zoom, resize via keyboard, swap positions, and jump to panes by number
+**Depends on**: Phase 2 (Terminal)
+**Requirements**: PANE-01, PANE-02, PANE-03, PANE-04
+**Success Criteria** (what must be TRUE):
+  1. User can press Ctrl+B z to toggle a pane between fullscreen and its original layout position
+  2. User can press Ctrl+B Ctrl+arrows to resize the active pane in that direction without touching the mouse
+  3. User can press Ctrl+B { or } to swap the active pane with its sibling
+  4. User can press Ctrl+B q to flash pane numbers, then press a number to jump to that pane
+**Plans**: 2 plans (Wave 1 -> Wave 2)
+
+Plans:
+- [ ] 11-01: Pane zoom toggle + keyboard resize (store actions + useKeyboard bindings) — Wave 1
+- [ ] 11-02: Swap panes + select-by-number (pane numbering UI + store actions) — Wave 2
+
+### Phase 12: Search
+**Goal**: Users can search within conversation output to find specific text, with match highlighting and prev/next navigation
+**Depends on**: Phase 2 (Terminal)
+**Requirements**: SEARCH-01, SEARCH-02, SEARCH-03
+**Success Criteria** (what must be TRUE):
+  1. User can press Cmd+F to open a search bar within the active conversation
+  2. All matches are highlighted in the scrollback and the view scrolls to the first match
+  3. User can press Enter/Shift+Enter or arrows to navigate between matches with a match counter (e.g., "3 of 12")
+**Plans**: 1 plan
+
+Plans:
+- [ ] 12-01: Search bar component + xterm.js SearchAddon integration + keyboard bindings — Wave 1
+
+### Phase 13: Layout Enhancement
+**Goal**: Layouts persist across app restarts, can be cycled with a single keystroke, and include an equal/tiled preset
+**Depends on**: Phase 2 (Terminal), Phase 11 (Pane Enhancement)
+**Requirements**: LAYOUT-01, LAYOUT-02, LAYOUT-03
+**Success Criteria** (what must be TRUE):
+  1. User closes the app, reopens it, and the pane layout (splits, sizes, session assignments) is exactly restored
+  2. User can press Ctrl+B space to cycle through layout presets (even, focus-left, focus-right, golden, tiled)
+  3. An equal/tiled preset exists that makes all panes exactly the same size
+**Plans**: 2 plans (Wave 1 -> Wave 2)
+
+Plans:
+- [ ] 13-01: Layout state serialization + persistence to daemon config — Wave 1
+- [ ] 13-02: Cycle-layouts keybinding + equal/tiled preset — Wave 2
+
+### Phase 14: Windows
+**Goal**: Users can organize conversations into separate window groups (like tmux windows/tabs), switching between them to manage different workspaces
+**Depends on**: Phase 2 (Terminal), Phase 8 (Session Management)
+**Requirements**: WIN-01, WIN-02, WIN-03, WIN-04, WIN-05
+**Success Criteria** (what must be TRUE):
+  1. User can create a new window (tab) that has its own independent set of panes
+  2. User can switch between windows via keyboard shortcut (Ctrl+B n/p for next/prev, Ctrl+B 0-9 for direct)
+  3. User can rename a window to give it a descriptive label
+  4. User can see all windows in a tab bar or list with the active window highlighted
+  5. User can close a window (with confirmation if it has active conversations)
+**Plans**: 3 plans (Wave 1 -> Wave 2 -> Wave 3)
+
+Plans:
+- [ ] 14-01: Window data model in pane store + daemon state persistence — Wave 1
+- [ ] 14-02: Window tab bar UI component + switch/create/close actions — Wave 2
+- [ ] 14-03: Keyboard shortcuts (Ctrl+B n/p/0-9/,) + command palette integration — Wave 3
+
 ## Progress
 
 **Execution Order:**
@@ -167,11 +266,15 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6
 | 6. Polish | 3/3 | Complete | 2026-02-12 |
 | 7. Git View | 0/3 | Planned | - |
 | 8. Session Management | 0/3 | Planned | - |
+| 9. MCP Skills | 0/3 | Planned | - |
+| 10. Agent Management | 0/3 | Planned | - |
+| 11. Pane Enhancement | 0/2 | Planned | - |
+| 12. Search | 0/1 | Planned | - |
+| 13. Layout Enhancement | 0/2 | Planned | - |
+| 14. Windows | 0/3 | Planned | - |
 
 ## Parking Lot
 
 Features mentioned but not yet scoped:
 
-- **Skills** — Claude Code skill system integration (TBD)
-- **Agents** — Multi-agent capabilities (TBD)
 - **Plugins** — Plugin architecture for extensibility (TBD)
