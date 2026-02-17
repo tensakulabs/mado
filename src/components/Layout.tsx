@@ -1,16 +1,15 @@
 import { useCallback, useRef } from "react";
-import { type PaneNode, usePaneStore } from "../stores/panes";
+import { usePaneStore } from "../stores/panes";
 import { Pane } from "./Pane";
 
-const MIN_PANE_SIZE = 100; // pixels
-
 /**
- * Recursively renders the pane tree with draggable split handles.
+ * Renders panes as a flat column/cell grid with draggable resize handles.
+ * Columns are laid out horizontally, cells within each column vertically.
  */
 export function Layout() {
-  const root = usePaneStore((s) => s.root);
+  const columns = usePaneStore((s) => s.columns);
 
-  if (!root) {
+  if (columns.length === 0) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-theme-secondary">
         <p className="text-sm text-theme-muted">No panes</p>
@@ -19,49 +18,47 @@ export function Layout() {
   }
 
   return (
-    <div className="h-full w-full">
-      <PaneTreeNode node={root} />
+    <div className="flex h-full w-full overflow-hidden flex-row">
+      {columns.map((col, colIdx) => (
+        <ColumnWithHandle key={col.id} colIndex={colIdx} />
+      ))}
     </div>
   );
 }
 
-function PaneTreeNode({ node }: { node: PaneNode }) {
-  if (node.type === "leaf") {
-    return <Pane paneId={node.id} sessionId={node.sessionId} />;
-  }
-
-  return <SplitView node={node} />;
-}
-
-function SplitView({
-  node,
-}: {
-  node: Extract<PaneNode, { type: "split" }>;
-}) {
-  const resizePane = usePaneStore((s) => s.resizePane);
+/**
+ * Renders a single column (with its cells) and optionally a resize handle
+ * on its right edge (between this column and the next).
+ */
+function ColumnWithHandle({ colIndex }: { colIndex: number }) {
+  const columns = usePaneStore((s) => s.columns);
+  const resizeColumns = usePaneStore((s) => s.resizeColumns);
+  const col = columns[colIndex];
+  const isLastColumn = colIndex === columns.length - 1;
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const isHorizontal = node.direction === "horizontal";
-
-  const handleMouseDown = useCallback(
+  const handleColumnResize = useCallback(
     (e: React.MouseEvent) => {
       e.preventDefault();
-      const container = containerRef.current;
-      if (!container) return;
+      const parent = containerRef.current?.parentElement;
+      if (!parent) return;
 
-      const rect = container.getBoundingClientRect();
-      const totalSize = isHorizontal ? rect.width : rect.height;
-      const offset = isHorizontal ? rect.left : rect.top;
+      const rect = parent.getBoundingClientRect();
+      const totalWidth = rect.width;
+      const offsetLeft = rect.left;
+
+      // Sum of widths up to (but not including) colIndex.
+      let leftOffset = 0;
+      for (let i = 0; i < colIndex; i++) {
+        leftOffset += columns[i].width;
+      }
+      const combinedWidth = columns[colIndex].width + columns[colIndex + 1].width;
 
       const onMouseMove = (moveEvent: MouseEvent) => {
-        const pos = isHorizontal ? moveEvent.clientX : moveEvent.clientY;
-        let ratio = (pos - offset) / totalSize;
-
-        // Enforce minimum size.
-        const minRatio = MIN_PANE_SIZE / totalSize;
-        ratio = Math.max(minRatio, Math.min(1 - minRatio, ratio));
-
-        resizePane(node.id, ratio);
+        const pos = moveEvent.clientX;
+        const pctFromLeft = ((pos - offsetLeft) / totalWidth) * 100;
+        const ratio = Math.max(0.05, Math.min(0.95, (pctFromLeft - leftOffset) / combinedWidth));
+        resizeColumns(colIndex, ratio);
       };
 
       const onMouseUp = () => {
@@ -73,59 +70,118 @@ function SplitView({
 
       document.addEventListener("mousemove", onMouseMove);
       document.addEventListener("mouseup", onMouseUp);
-      document.body.style.cursor = isHorizontal ? "col-resize" : "row-resize";
+      document.body.style.cursor = "col-resize";
       document.body.style.userSelect = "none";
     },
-    [node.id, isHorizontal, resizePane],
+    [colIndex, columns, resizeColumns],
   );
 
-  const firstPercent = `${node.ratio * 100}%`;
-  const secondPercent = `${(1 - node.ratio) * 100}%`;
+  return (
+    <>
+      <div
+        ref={containerRef}
+        className="flex min-w-0 flex-col"
+        style={{
+          flex: `${col.width} 1 0`,
+          overflow: "hidden",
+        }}
+      >
+        {col.cells.map((cell, cellIdx) => (
+          <CellWithHandle
+            key={cell.id}
+            colIndex={colIndex}
+            cellIndex={cellIdx}
+          />
+        ))}
+      </div>
+      {/* Column resize handle (not on last column) */}
+      {!isLastColumn && (
+        <div
+          className="w-1 flex-shrink-0 cursor-col-resize bg-theme-tertiary transition-colors hover:bg-blue-500/40"
+          onMouseDown={handleColumnResize}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Renders a single cell (pane) and optionally a resize handle below it
+ * (between this cell and the next in the same column).
+ */
+function CellWithHandle({
+  colIndex,
+  cellIndex,
+}: {
+  colIndex: number;
+  cellIndex: number;
+}) {
+  const columns = usePaneStore((s) => s.columns);
+  const resizeCells = usePaneStore((s) => s.resizeCells);
+  const col = columns[colIndex];
+  const cell = col.cells[cellIndex];
+  const height = col.cellHeights[cellIndex];
+  const isLastCell = cellIndex === col.cells.length - 1;
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const handleCellResize = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      const colEl = containerRef.current?.parentElement;
+      if (!colEl) return;
+
+      const rect = colEl.getBoundingClientRect();
+      const totalHeight = rect.height;
+      const offsetTop = rect.top;
+
+      // Sum of heights above this cell.
+      let topOffset = 0;
+      for (let i = 0; i < cellIndex; i++) {
+        topOffset += col.cellHeights[i];
+      }
+      const combinedHeight = col.cellHeights[cellIndex] + col.cellHeights[cellIndex + 1];
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        const pos = moveEvent.clientY;
+        const pctFromTop = ((pos - offsetTop) / totalHeight) * 100;
+        const ratio = Math.max(0.05, Math.min(0.95, (pctFromTop - topOffset) / combinedHeight));
+        resizeCells(colIndex, cellIndex, ratio);
+      };
+
+      const onMouseUp = () => {
+        document.removeEventListener("mousemove", onMouseMove);
+        document.removeEventListener("mouseup", onMouseUp);
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      };
+
+      document.addEventListener("mousemove", onMouseMove);
+      document.addEventListener("mouseup", onMouseUp);
+      document.body.style.cursor = "row-resize";
+      document.body.style.userSelect = "none";
+    },
+    [colIndex, cellIndex, col.cellHeights, resizeCells],
+  );
 
   return (
-    <div
-      ref={containerRef}
-      className={`flex h-full w-full ${
-        isHorizontal ? "flex-row" : "flex-col"
-      }`}
-    >
-      {/* First child */}
+    <>
       <div
+        ref={containerRef}
+        className="min-h-0 min-w-0"
         style={{
-          flexBasis: firstPercent,
-          flexGrow: 0,
-          flexShrink: 0,
-          minWidth: isHorizontal ? MIN_PANE_SIZE : undefined,
-          minHeight: !isHorizontal ? MIN_PANE_SIZE : undefined,
+          flex: `${height} 1 0`,
           overflow: "hidden",
         }}
       >
-        <PaneTreeNode node={node.children[0]} />
+        <Pane paneId={cell.id} sessionId={cell.sessionId} />
       </div>
-
-      {/* Drag handle */}
-      <div
-        className={`${
-          isHorizontal
-            ? "w-1 cursor-col-resize hover:bg-blue-500/40"
-            : "h-1 cursor-row-resize hover:bg-blue-500/40"
-        } flex-shrink-0 bg-theme-tertiary transition-colors`}
-        onMouseDown={handleMouseDown}
-      />
-
-      {/* Second child */}
-      <div
-        style={{
-          flexBasis: secondPercent,
-          flexGrow: 0,
-          flexShrink: 0,
-          minWidth: isHorizontal ? MIN_PANE_SIZE : undefined,
-          minHeight: !isHorizontal ? MIN_PANE_SIZE : undefined,
-          overflow: "hidden",
-        }}
-      >
-        <PaneTreeNode node={node.children[1]} />
-      </div>
-    </div>
+      {/* Cell resize handle (not on last cell in column) */}
+      {!isLastCell && (
+        <div
+          className="h-1 flex-shrink-0 cursor-row-resize bg-theme-tertiary transition-colors hover:bg-blue-500/40"
+          onMouseDown={handleCellResize}
+        />
+      )}
+    </>
   );
 }

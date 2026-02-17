@@ -111,6 +111,7 @@ export function ChatView({ sessionId }: ChatViewProps) {
   const subscribeToStream = useConversationStore((s) => s.subscribeToStream);
   const getSessionModel = useSessionStore((s) => s.getSessionModel);
   const setSessionModel = useSessionStore((s) => s.setSessionModel);
+  const hasExplicitWorkspace = useSessionStore((s) => s.hasExplicitWorkspace);
 
   // Track if initial load is complete
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -161,17 +162,22 @@ export function ChatView({ sessionId }: ChatViewProps) {
   }, [messages, currentModel]);
 
   // Initialize session and load messages.
+  // Workspace sessions (user explicitly chose a folder) auto-load CLI history.
+  // Default/bare conversations start blank.
   useEffect(() => {
     if (sessionId) {
       setIsInitialLoading(true);
       initSession(sessionId);
       subscribeToStream(sessionId);
-      // Wait for both history and messages to load
-      Promise.all([loadHistory(sessionId), loadMessages(sessionId)]).finally(() => {
+      const loads: Promise<void>[] = [loadMessages(sessionId)];
+      if (hasExplicitWorkspace(sessionId)) {
+        loads.push(loadHistory(sessionId));
+      }
+      Promise.all(loads).finally(() => {
         setIsInitialLoading(false);
       });
     }
-  }, [sessionId, initSession, loadHistory, loadMessages, subscribeToStream]);
+  }, [sessionId, initSession, loadMessages, loadHistory, subscribeToStream, hasExplicitWorkspace]);
 
   // Auto-scroll to bottom when new messages arrive.
   useEffect(() => {
@@ -212,12 +218,12 @@ export function ChatView({ sessionId }: ChatViewProps) {
   }
 
   return (
-    <div className="flex h-full flex-col bg-theme-secondary">
+    <div className="flex h-full min-w-0 flex-col overflow-hidden bg-theme-secondary">
       {/* Messages area */}
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto"
+        className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden"
       >
         {/* Loading state */}
         {isInitialLoading && (

@@ -3,13 +3,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { ChatView } from "./ChatView";
 import { GitView } from "./GitView";
 import { Timeline } from "./Timeline";
-// ChangeDetails no longer used - [+N -M] opens GitView directly.
+import { CommitModal } from "./git/CommitModal";
 import { PaneWelcome } from "./PaneWelcome";
+import { SessionSidebar } from "./SessionSidebar";
+import { Tooltip } from "./Tooltip";
 import { usePaneStore } from "../stores/panes";
 import { useSessionStore } from "../stores/sessions";
 import { useUiStore } from "../stores/ui";
-import { useVersioning } from "../hooks/useVersioning";
 import { useChangeIndicator } from "../hooks/useChangeIndicator";
+import { useResizableSidebar } from "../hooks/useResizableSidebar";
+import { gitStatus, gitBranchInfo } from "../lib/ipc";
 
 interface PaneProps {
   paneId: string;
@@ -42,11 +45,18 @@ export function Pane({ paneId, sessionId }: PaneProps) {
   const closeGitView = useUiStore((s) => s.closeGitView);
 
   // Local state
+  const [paneSidebarOpen, setPaneSidebarOpen] = useState(false);
   const [showTimeline, setShowTimeline] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [commitModalOpen, setCommitModalOpen] = useState(false);
+  const [branch, setBranch] = useState("main");
+  const [hasRemote, setHasRemote] = useState(false);
+  const [commitFilePaths, setCommitFilePaths] = useState<string[]>([]);
 
-  // Custom hooks
-  const { save, isSaving, error: versionError, clearError } = useVersioning();
+  // Resizable sidebar hooks
+  const { width: sidebarWidth, handleMouseDown: onSidebarResizeMouseDown, isResizing: isSidebarResizing } = useResizableSidebar();
+  const { width: timelineWidth, handleMouseDown: onTimelineResizeMouseDown, isResizing: isTimelineResizing } = useResizableSidebar({ storageKey: "mado-timeline-width", side: "right" });
+
+  // Custom hooks (useVersioning removed — CommitModal handles commits now)
   const {
     insertions,
     deletions,
@@ -86,14 +96,20 @@ export function Pane({ paneId, sessionId }: PaneProps) {
 
   const handleSave = useCallback(async () => {
     if (!sessionId) return;
-    const message = `Milestone ${new Date().toLocaleTimeString()}`;
-    const milestone = await save(sessionId, message);
-    if (milestone) {
-      setSaveMessage("Saved!");
-      refreshChanges();
-      setTimeout(() => setSaveMessage(null), 2000);
+    try {
+      const [status, branchInfo] = await Promise.all([
+        gitStatus(sessionId),
+        gitBranchInfo(sessionId),
+      ]);
+      const allFiles = [...status.staged, ...status.unstaged];
+      setBranch(branchInfo.branch);
+      setHasRemote(branchInfo.has_remote);
+      setCommitFilePaths(allFiles.map((f) => f.path));
+      setCommitModalOpen(true);
+    } catch (err) {
+      console.error("Failed to fetch git status:", err);
     }
-  }, [sessionId, save, refreshChanges]);
+  }, [sessionId]);
 
   const toggleTimeline = useCallback(() => {
     setShowTimeline((prev) => !prev);
@@ -181,7 +197,7 @@ export function Pane({ paneId, sessionId }: PaneProps) {
 
   return (
     <div
-      className={`flex h-full w-full flex-col overflow-hidden ${
+      className={`flex h-full w-full min-w-0 flex-col overflow-hidden ${
         isActive
           ? "ring-1 ring-blue-500/60"
           : "ring-1 ring-theme-primary"
@@ -196,35 +212,66 @@ export function Pane({ paneId, sessionId }: PaneProps) {
             : "bg-theme-tertiary text-theme-muted"
         }`}
       >
-        <div className="flex items-center gap-3 truncate">
+        <div className="flex items-center gap-1.5 truncate">
           {/* Workspace - clickable to change folder */}
-          <button
-            onClick={handleWorkspaceClick}
-            className="flex items-center gap-1.5 truncate rounded px-2 py-1 text-sm font-medium hover:bg-theme-tertiary"
-            title={session?.working_dir ? `Workspace: ${session.working_dir}\nClick to change` : "Click to select workspace"}
-          >
-            <span className="text-blue-400">📁</span>
-            <span className="truncate">{getWorkspaceDisplay()}</span>
-          </button>
+          <Tooltip content={session?.working_dir ? `Workspace: ${session.working_dir} - Click to change` : "Click to select workspace"} position="bottom">
+            <button
+              onClick={handleWorkspaceClick}
+              className="flex items-center gap-1.5 truncate rounded px-2 py-1 text-sm font-medium hover:bg-theme-tertiary"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className="h-4.5 w-4.5 flex-shrink-0 text-theme-muted"
+              >
+                <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.879a1.5 1.5 0 0 1 1.06.44l1.122 1.12A1.5 1.5 0 0 0 9.62 5H12.5A1.5 1.5 0 0 1 14 6.5v1.384l-2.162 3.243A1.75 1.75 0 0 1 10.382 12H2.476a.476.476 0 0 1-.396-.737L4.677 7H2V4.5Z" />
+                <path d="M5.25 7 2.5 11.25h7.882a.25.25 0 0 0 .208-.112L13.34 7H5.25Z" />
+              </svg>
+              <span className="truncate">{getWorkspaceDisplay()}</span>
+            </button>
+          </Tooltip>
+          {/* Sidebar panel toggle — right of workspace name */}
+          <Tooltip content={paneSidebarOpen ? "Hide sidebar" : "Show sidebar"} position="bottom">
+            <button
+              onClick={(e) => { e.stopPropagation(); setPaneSidebarOpen((v) => !v); }}
+              className={`rounded p-1 transition-colors ${
+                paneSidebarOpen
+                  ? "text-theme-accent hover:bg-theme-tertiary"
+                  : "text-theme-muted hover:bg-theme-tertiary hover:text-theme-secondary"
+              }`}
+              aria-label={paneSidebarOpen ? "Hide sidebar" : "Show sidebar"}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 16 16"
+                fill="currentColor"
+                className="h-3.5 w-3.5"
+              >
+                <path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h9A1.5 1.5 0 0 1 14 3.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-9ZM3.5 3a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5H6V3H3.5ZM7 3v10h5.5a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5H7Z" />
+              </svg>
+            </button>
+          </Tooltip>
           {/* Change indicator - always show when session exists */}
           {session && (
             <div className="relative">
-              <button
-                onClick={toggleChangeDetails}
-                className={`font-mono text-xs rounded px-1 py-0.5 transition-colors ${
-                  hasChanges
-                    ? "hover:bg-theme-tertiary"
-                    : "text-theme-muted hover:bg-theme-tertiary"
-                }`}
-                title={
+              <Tooltip content={
                   hasChanges
                     ? `${files.length} file${files.length !== 1 ? "s" : ""} changed - click for details`
                     : "No uncommitted changes"
-                }
-              >
-                [<span className={insertions > 0 ? "text-green-400" : "text-theme-muted"}>+{insertions}</span>{" "}
-                <span className={deletions > 0 ? "text-red-400" : "text-theme-muted"}>-{deletions}</span>]
-              </button>
+                } position="bottom">
+                <button
+                  onClick={toggleChangeDetails}
+                  className={`font-mono text-xs rounded px-1 py-0.5 transition-colors ${
+                    hasChanges
+                      ? "hover:bg-theme-tertiary"
+                      : "text-theme-muted hover:bg-theme-tertiary"
+                  }`}
+                >
+                  [<span className={insertions > 0 ? "text-green-400" : "text-theme-muted"}>+{insertions}</span>{" "}
+                  <span className={deletions > 0 ? "text-red-400" : "text-theme-muted"}>-{deletions}</span>]
+                </button>
+              </Tooltip>
               {/* ChangeDetails popup removed - [+N -M] now opens GitView */}
             </div>
           )}
@@ -233,60 +280,68 @@ export function Pane({ paneId, sessionId }: PaneProps) {
           {/* Save and history buttons - show for all sessions */}
           {session && (
             <>
-              {saveMessage && (
-                <span className="text-xs text-green-400">{saveMessage}</span>
-              )}
-              {versionError && (
-                <span
-                  className="text-xs text-yellow-400 cursor-pointer"
-                  onClick={clearError}
-                  title={versionError}
+              {/* Save button — opens commit modal */}
+              <Tooltip content="Commit changes" position="bottom" align="end">
+                <button
+                  onClick={handleSave}
+                  className="rounded border border-green-700/50 px-2 py-0.5 text-xs font-medium text-green-400 hover:border-green-500 hover:bg-green-900/30"
                 >
-                  {versionError.includes("No changes") ? "No changes" : "Error"}
-                </span>
-              )}
-              {/* Save button */}
-              <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className={`rounded px-2 py-1 text-xs ${
-                  isSaving
-                    ? "text-theme-muted"
-                    : "text-theme-muted hover:bg-green-900/30 hover:text-green-400"
-                }`}
-                title="Save milestone"
-              >
-                {isSaving ? "..." : "save"}
-              </button>
-              {/* Timeline toggle */}
-              <button
-                onClick={toggleTimeline}
-                className={`rounded px-2 py-1 text-xs ${
-                  showTimeline
-                    ? "bg-blue-900/30 text-blue-400"
-                    : "text-theme-muted hover:bg-theme-tertiary hover:text-theme-secondary"
-                }`}
-                title="Toggle timeline"
-              >
-                history
-              </button>
+                  Save
+                </button>
+              </Tooltip>
+              <div className="h-3 w-px bg-theme-tertiary" />
+              {/* Timeline toggle — subtle, secondary action */}
+              <Tooltip content="Toggle timeline" position="bottom" align="end">
+                <button
+                  onClick={toggleTimeline}
+                  className={`rounded px-2 py-0.5 text-xs ${
+                    showTimeline
+                      ? "bg-blue-900/30 text-blue-400"
+                      : "text-theme-muted hover:bg-theme-tertiary hover:text-theme-secondary"
+                  }`}
+                >
+                  History
+                </button>
+              </Tooltip>
             </>
           )}
           {/* Close button */}
-          <button
-            onClick={handleClose}
-            className="rounded px-2 py-1 text-theme-muted hover:bg-red-900/30 hover:text-red-400"
-            title="Close pane (Ctrl+B x)"
-          >
-            ×
-          </button>
+          <Tooltip content="Close pane (Ctrl+B x)" position="bottom" align="end">
+            <button
+              onClick={handleClose}
+              className="rounded px-2 py-1 text-theme-muted hover:bg-red-900/30 hover:text-red-400"
+              aria-label="Close pane"
+            >
+              ×
+            </button>
+          </Tooltip>
         </div>
       </div>
 
       {/* Main content area */}
-      <div className="flex flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
+        {/* Per-pane session sidebar */}
+        {paneSidebarOpen && (
+          <div
+            className="relative flex-shrink-0"
+            style={{ "--sidebar-width": `${sidebarWidth}px` } as React.CSSProperties}
+          >
+            <SessionSidebar
+              paneId={paneId}
+              sessionId={sessionId}
+              onClose={() => setPaneSidebarOpen(false)}
+            />
+            {/* Resize drag handle */}
+            <div
+              onMouseDown={onSidebarResizeMouseDown}
+              className={`absolute right-0 top-0 h-full w-1 cursor-col-resize z-10 transition-colors ${
+                isSidebarResizing ? "bg-blue-500/50" : "hover:bg-blue-500/30"
+              }`}
+            />
+          </div>
+        )}
         {/* Chat area or Git view */}
-        <div className="flex-1 min-h-0">
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden">
           {currentView === "git" && gitViewSessionId === sessionId ? (
             <GitView sessionId={sessionId} onClose={closeGitView} />
           ) : (
@@ -296,7 +351,14 @@ export function Pane({ paneId, sessionId }: PaneProps) {
 
         {/* Timeline sidebar (only show in chat view) */}
         {showTimeline && currentView === "chat" && (
-          <div className="w-64 min-w-[200px]">
+          <div className="relative flex-shrink-0" style={{ width: `${timelineWidth}px` }}>
+            {/* Resize drag handle on left edge */}
+            <div
+              onMouseDown={onTimelineResizeMouseDown}
+              className={`absolute left-0 top-0 h-full w-1 cursor-col-resize z-10 transition-colors ${
+                isTimelineResizing ? "bg-blue-500/50" : "hover:bg-blue-500/30"
+              }`}
+            />
             <Timeline
               sessionId={sessionId}
               onClose={() => setShowTimeline(false)}
@@ -304,6 +366,20 @@ export function Pane({ paneId, sessionId }: PaneProps) {
           </div>
         )}
       </div>
+
+      {/* Commit modal */}
+      <CommitModal
+        isOpen={commitModalOpen}
+        onClose={() => setCommitModalOpen(false)}
+        sessionId={sessionId}
+        branch={branch}
+        hasRemote={hasRemote}
+        fileCount={files.length}
+        insertions={insertions}
+        deletions={deletions}
+        filePaths={commitFilePaths}
+        onCommitComplete={refreshChanges}
+      />
     </div>
   );
 }
