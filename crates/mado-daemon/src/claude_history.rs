@@ -1,14 +1,14 @@
 //! Claude CLI history import.
 //!
 //! Parses Claude CLI session files from ~/.claude/projects/ to import
-//! conversation history into Kobo.
+//! conversation history into Mado.
 
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use mado_core::types::{Message, MessageRole, ToolCall, ToolCallStatus};
@@ -271,11 +271,54 @@ pub fn list_available_sessions(working_dir: &Path) -> Result<Vec<SessionInfo>, H
 }
 
 /// Info about a Claude CLI session.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct SessionInfo {
     pub id: String,
     pub modified: Option<DateTime<Utc>>,
     pub message_count: usize,
+}
+
+/// List session summaries for a working directory (fast — uses file metadata, no parsing).
+/// Returns at most `limit` sessions, sorted newest first.
+pub fn list_session_summaries(working_dir: &Path, limit: Option<usize>) -> Result<Vec<SessionInfo>, HistoryError> {
+    let project_dir = find_project_dir(working_dir)
+        .ok_or_else(|| HistoryError::ProjectNotFound(working_dir.to_path_buf()))?;
+
+    let sessions = list_sessions(&project_dir);
+    let cap = limit.unwrap_or(50).min(sessions.len());
+    let mut infos = Vec::with_capacity(cap);
+
+    for session_path in sessions.iter().take(cap) {
+        let id = session_path
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        let modified = fs::metadata(session_path)
+            .and_then(|m| m.modified())
+            .ok()
+            .map(|t| DateTime::<Utc>::from(t));
+
+        // Estimate message count from line count (fast) instead of full parse.
+        let message_count = fs::metadata(session_path)
+            .map(|m| {
+                // Rough estimate: each JSONL entry is ~500-2000 bytes.
+                // Divide file size by 1000 for a reasonable message count estimate.
+                // User/assistant pairs, so divide by 2-3 for actual exchanges.
+                let size = m.len();
+                (size / 1000).max(1) as usize
+            })
+            .unwrap_or(0);
+
+        infos.push(SessionInfo {
+            id,
+            modified,
+            message_count,
+        });
+    }
+
+    Ok(infos)
 }
 
 /// Errors from history import.

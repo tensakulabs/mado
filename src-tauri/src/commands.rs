@@ -194,6 +194,24 @@ pub fn delete_api_key() -> Result<(), String> {
     mado_daemon::keystore::KeyStore::delete_api_key().map_err(|e| e.to_string())
 }
 
+/// Delete all Mado data: config directory (~/.mado/) and stored API key.
+/// Returns the app to a fresh first-launch state.
+#[tauri::command]
+pub fn delete_all_data() -> Result<(), String> {
+    // Delete API key from keychain (ignore errors if none stored).
+    let _ = mado_daemon::keystore::KeyStore::delete_api_key();
+
+    // Remove the ~/.mado/ directory (config, conversations, logs, state).
+    let config_dir = mado_daemon::config::config_dir();
+    if config_dir.exists() {
+        std::fs::remove_dir_all(&config_dir)
+            .map_err(|e| format!("Failed to delete {}: {}", config_dir.display(), e))?;
+        tracing::info!("Deleted data directory: {}", config_dir.display());
+    }
+
+    Ok(())
+}
+
 // ── Config commands ──
 
 /// Get the current Mado configuration.
@@ -539,6 +557,40 @@ pub async fn git_log(
         .map_err(|e| e.to_string())
 }
 
+/// Get git branch info (name + remote existence).
+#[tauri::command]
+pub async fn git_branch_info(
+    state: State<'_, DaemonState>,
+    session_id: String,
+) -> Result<mado_core::types::BranchInfo, String> {
+    let guard = state.client.read().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .git_branch_info(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Push current branch to origin remote.
+#[tauri::command]
+pub async fn git_push(
+    state: State<'_, DaemonState>,
+    session_id: String,
+) -> Result<(), String> {
+    let guard = state.client.read().await;
+    let client = guard
+        .as_ref()
+        .ok_or_else(|| "Not connected to daemon".to_string())?;
+
+    client
+        .git_push(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// List available AI models.
 #[tauri::command]
 pub fn list_models() -> Vec<ModelInfo> {
@@ -615,6 +667,18 @@ pub async fn cancel_response(
     client
         .cancel_response(&session_id)
         .await
+        .map_err(|e| e.to_string())
+}
+
+/// List Claude CLI sessions for a working directory.
+/// Returns session metadata (id, modified date, estimated message count).
+#[tauri::command]
+pub fn list_cli_sessions(
+    working_dir: String,
+    limit: Option<usize>,
+) -> Result<Vec<mado_daemon::claude_history::SessionInfo>, String> {
+    let path = std::path::Path::new(&working_dir);
+    mado_daemon::claude_history::list_session_summaries(path, limit)
         .map_err(|e| e.to_string())
 }
 

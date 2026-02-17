@@ -1,7 +1,7 @@
 import { invoke, Channel } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
-// Types matching kobo-core types.
+// Types matching mado-core types.
 export interface DaemonStatus {
   pid: number;
   uptime: number;
@@ -20,6 +20,7 @@ export interface Session {
   command?: string;
   shell_fallback: boolean;
   message_count: number;
+  claude_session_id?: string;
 }
 
 export interface ModelInfo {
@@ -53,6 +54,11 @@ export interface DiffSummary {
 export interface GitStatus {
   staged: FileDiff[];
   unstaged: FileDiff[];
+}
+
+export interface BranchInfo {
+  branch: string;
+  has_remote: boolean;
 }
 
 export interface GitLogEntry {
@@ -172,6 +178,10 @@ export async function setApiKey(key: string): Promise<void> {
 
 export async function deleteApiKey(): Promise<void> {
   return invoke<void>("delete_api_key");
+}
+
+export async function deleteAllData(): Promise<void> {
+  return invoke<void>("delete_all_data");
 }
 
 // ── Config commands ──
@@ -332,6 +342,18 @@ export async function gitLog(
   return invoke<GitLogEntry[]>("git_log", { sessionId, limit });
 }
 
+/** Get branch info (current branch name and whether origin remote exists). */
+export async function gitBranchInfo(
+  sessionId: string,
+): Promise<BranchInfo> {
+  return invoke<BranchInfo>("git_branch_info", { sessionId });
+}
+
+/** Push current branch to origin remote. */
+export async function gitPush(sessionId: string): Promise<void> {
+  return invoke<void>("git_push", { sessionId });
+}
+
 /**
  * Get diff stats from git status.
  * Wraps gitStatus to provide aggregate file diff statistics.
@@ -349,6 +371,25 @@ export async function gitDiffStat(
     totalDeletions,
     files: allFiles,
   };
+}
+
+// ── Claude CLI history ──
+
+export interface CliSessionInfo {
+  id: string;
+  modified: string | null;
+  message_count: number;
+}
+
+/**
+ * List Claude CLI sessions for a working directory.
+ * Returns session metadata (id, modified date, estimated message count).
+ */
+export async function listCliSessions(
+  workingDir: string,
+  limit?: number,
+): Promise<CliSessionInfo[]> {
+  return invoke<CliSessionInfo[]>("list_cli_sessions", { workingDir, limit });
 }
 
 // ── SSE bridge ──
