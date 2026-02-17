@@ -683,12 +683,15 @@ pub fn list_cli_sessions(
 }
 
 /// Import Claude CLI history for a session's working directory.
+/// If `target_cli_session_id` is provided, imports that specific CLI session
+/// and sets the Mado session's claude_session_id for future `--resume`.
 #[tauri::command]
 pub async fn import_history(
     state: State<'_, DaemonState>,
     session_id: String,
     limit: Option<usize>,
     all_sessions: Option<bool>,
+    target_cli_session_id: Option<String>,
 ) -> Result<Vec<Message>, String> {
     let guard = state.client.read().await;
     let client = guard
@@ -696,7 +699,12 @@ pub async fn import_history(
         .ok_or_else(|| "Not connected to daemon".to_string())?;
 
     client
-        .import_history(&session_id, limit, all_sessions)
+        .import_history(
+            &session_id,
+            limit,
+            all_sessions,
+            target_cli_session_id.as_deref(),
+        )
         .await
         .map_err(|e| e.to_string())
 }

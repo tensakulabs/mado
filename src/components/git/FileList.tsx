@@ -8,10 +8,10 @@ interface FileListProps {
   selectedFile: string | null;
   viewMode: "list" | "tree";
   onSelectFile: (path: string, isStaged: boolean) => void;
-  onStageFile: (path: string) => void;
-  onUnstageFile: (path: string) => void;
   onStageAll: () => void;
   onUnstageAll: () => void;
+  onStagePaths: (paths: string[]) => void;
+  onUnstagePaths: (paths: string[]) => void;
 }
 
 /** Status color dot matching ChangeDetails.tsx patterns. */
@@ -45,16 +45,16 @@ function statusLabel(status: string): string {
 interface FileRowProps {
   file: FileDiff;
   isSelected: boolean;
-  isStaged: boolean;
+  isChecked: boolean;
   /** Override display name (e.g. just filename in tree view). Defaults to full path. */
   displayName?: string;
   /** Show a file icon before the name (used in tree view). */
   showFileIcon?: boolean;
   onSelect: () => void;
-  onToggle: () => void;
+  onToggleCheck: () => void;
 }
 
-function FileRow({ file, isSelected, isStaged, displayName, showFileIcon, onSelect, onToggle }: FileRowProps) {
+function FileRow({ file, isSelected, isChecked, displayName, showFileIcon, onSelect, onToggleCheck }: FileRowProps) {
   return (
     <div
       role="option"
@@ -67,21 +67,21 @@ function FileRow({ file, isSelected, isStaged, displayName, showFileIcon, onSele
           : "text-theme-muted hover:bg-theme-tertiary"
       }`}
     >
-      {/* Stage/unstage toggle */}
-      <Tooltip content={isStaged ? "Unstage file" : "Stage file"}>
+      {/* Selection checkbox */}
+      <Tooltip content={isChecked ? "Deselect" : "Select"}>
         <button
           onClick={(e) => {
             e.stopPropagation();
-            onToggle();
+            onToggleCheck();
           }}
           className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
-            isStaged
-              ? "border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30"
+            isChecked
+              ? "border-blue-500 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
               : "border-theme-primary text-theme-muted hover:border-theme-secondary hover:bg-theme-tertiary"
           }`}
-          aria-label={isStaged ? "Unstage file" : "Stage file"}
+          aria-label={isChecked ? "Deselect file" : "Select file"}
         >
-        {isStaged && (
+        {isChecked && (
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 16 16"
@@ -233,10 +233,12 @@ interface TreeNodeRendererProps {
   depth: number;
   isStaged: boolean;
   selectedFile: string | null;
+  checkedFiles: Set<string>;
   expandedFolders: Set<string>;
   onToggleFolder: (path: string) => void;
   onSelectFile: (path: string, isStaged: boolean) => void;
-  onToggleStage: (path: string) => void;
+  onToggleCheck: (path: string) => void;
+  onToggleCheckBatch: (paths: string[]) => void;
 }
 
 function TreeNodeRenderer({
@@ -244,10 +246,12 @@ function TreeNodeRenderer({
   depth,
   isStaged,
   selectedFile,
+  checkedFiles,
   expandedFolders,
   onToggleFolder,
   onSelectFile,
-  onToggleStage,
+  onToggleCheck,
+  onToggleCheckBatch,
 }: TreeNodeRendererProps) {
   // File leaf node -- delegate to FileRow with indentation
   if (node.file) {
@@ -256,11 +260,11 @@ function TreeNodeRenderer({
         <FileRow
           file={node.file}
           isSelected={selectedFile === node.file.path}
-          isStaged={isStaged}
+          isChecked={checkedFiles.has(node.file.path)}
           displayName={node.name}
           showFileIcon
           onSelect={() => onSelectFile(node.file!.path, isStaged)}
-          onToggle={() => onToggleStage(node.file!.path)}
+          onToggleCheck={() => onToggleCheck(node.file!.path)}
         />
       </div>
     );
@@ -275,6 +279,9 @@ function TreeNodeRenderer({
     return a.name.localeCompare(b.name);
   });
 
+  const folderFilePaths = useMemo(() => collectFilePaths(node), [node]);
+  const allChecked = folderFilePaths.length > 0 && folderFilePaths.every((p) => checkedFiles.has(p));
+
   return (
     <div>
       <div
@@ -282,8 +289,33 @@ function TreeNodeRenderer({
         aria-expanded={isExpanded}
         onClick={() => onToggleFolder(node.fullPath)}
         style={{ paddingLeft: `${depth * 16}px` }}
-        className="flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-xs text-theme-muted transition-colors hover:bg-theme-tertiary"
+        className="group flex cursor-pointer items-center gap-1.5 rounded px-2 py-1 text-xs text-theme-muted transition-colors hover:bg-theme-tertiary"
       >
+        {/* Select/deselect folder toggle */}
+        <Tooltip content={allChecked ? `Deselect folder (${folderFilePaths.length})` : `Select folder (${folderFilePaths.length})`}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCheckBatch(folderFilePaths);
+            }}
+            className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
+              allChecked
+                ? "border-blue-500 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30"
+                : "border-theme-primary text-theme-muted hover:border-blue-500 hover:bg-blue-500/10 hover:text-blue-400"
+            }`}
+            aria-label={allChecked ? "Deselect folder" : "Select folder"}
+          >
+            {allChecked ? (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3 w-3">
+                <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60">
+                <path fillRule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clipRule="evenodd" />
+              </svg>
+            )}
+          </button>
+        </Tooltip>
         {isExpanded ? (
           <ChevronDown className="h-3 w-3 flex-shrink-0" />
         ) : (
@@ -300,10 +332,12 @@ function TreeNodeRenderer({
             depth={depth + 1}
             isStaged={isStaged}
             selectedFile={selectedFile}
+            checkedFiles={checkedFiles}
             expandedFolders={expandedFolders}
             onToggleFolder={onToggleFolder}
             onSelectFile={onSelectFile}
-            onToggleStage={onToggleStage}
+            onToggleCheck={onToggleCheck}
+            onToggleCheckBatch={onToggleCheckBatch}
           />
         ))}
     </div>
@@ -314,20 +348,24 @@ interface FileTreeViewProps {
   files: FileDiff[];
   isStaged: boolean;
   selectedFile: string | null;
+  checkedFiles: Set<string>;
   expandedFolders: Set<string>;
   onToggleFolder: (path: string) => void;
   onSelectFile: (path: string, isStaged: boolean) => void;
-  onToggleStage: (path: string) => void;
+  onToggleCheck: (path: string) => void;
+  onToggleCheckBatch: (paths: string[]) => void;
 }
 
 function FileTreeView({
   files,
   isStaged,
   selectedFile,
+  checkedFiles,
   expandedFolders,
   onToggleFolder,
   onSelectFile,
-  onToggleStage,
+  onToggleCheck,
+  onToggleCheckBatch,
 }: FileTreeViewProps) {
   const tree = useMemo(() => buildTree(files), [files]);
 
@@ -347,10 +385,12 @@ function FileTreeView({
           depth={0}
           isStaged={isStaged}
           selectedFile={selectedFile}
+          checkedFiles={checkedFiles}
           expandedFolders={expandedFolders}
           onToggleFolder={onToggleFolder}
           onSelectFile={onSelectFile}
-          onToggleStage={onToggleStage}
+          onToggleCheck={onToggleCheck}
+          onToggleCheckBatch={onToggleCheckBatch}
         />
       ))}
     </div>
@@ -358,6 +398,12 @@ function FileTreeView({
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Recursively collect all file paths from a tree node (for folder-level staging). */
+function collectFilePaths(node: TreeNode): string[] {
+  if (node.file) return [node.file.path];
+  return node.children.flatMap(collectFilePaths);
+}
 
 /** Collect all unique directory paths from a set of files, used to initialize expanded state. */
 function collectAllFolderPaths(files: FileDiff[]): Set<string> {
@@ -381,16 +427,90 @@ export function FileList({
   selectedFile,
   viewMode,
   onSelectFile,
-  onStageFile,
-  onUnstageFile,
   onStageAll,
   onUnstageAll,
+  onStagePaths,
+  onUnstagePaths,
 }: FileListProps) {
   // Expanded folder state for tree view (all folders start expanded).
   const allFiles = useMemo(() => [...staged, ...unstaged], [staged, unstaged]);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(
     () => collectAllFolderPaths(allFiles),
   );
+
+  // Checked (selected) files for batch stage/unstage operations.
+  const [checkedFiles, setCheckedFiles] = useState<Set<string>>(new Set());
+
+  // Clear checked files that no longer exist when file lists change.
+  useEffect(() => {
+    const allPaths = new Set(allFiles.map((f) => f.path));
+    setCheckedFiles((prev) => {
+      const next = new Set<string>();
+      for (const p of prev) {
+        if (allPaths.has(p)) next.add(p);
+      }
+      return next.size !== prev.size ? next : prev;
+    });
+  }, [allFiles]);
+
+  const toggleChecked = useCallback((path: string) => {
+    setCheckedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) {
+        next.delete(path);
+      } else {
+        next.add(path);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleCheckedBatch = useCallback((paths: string[]) => {
+    setCheckedFiles((prev) => {
+      const next = new Set(prev);
+      const allChecked = paths.every((p) => next.has(p));
+      if (allChecked) {
+        for (const p of paths) next.delete(p);
+      } else {
+        for (const p of paths) next.add(p);
+      }
+      return next;
+    });
+  }, []);
+
+  // Counts of checked files in each section for header buttons.
+  const stagedPaths = useMemo(() => new Set(staged.map((f) => f.path)), [staged]);
+  const checkedStagedCount = useMemo(
+    () => [...checkedFiles].filter((p) => stagedPaths.has(p)).length,
+    [checkedFiles, stagedPaths],
+  );
+  const unstagedPaths = useMemo(() => new Set(unstaged.map((f) => f.path)), [unstaged]);
+  const checkedUnstagedCount = useMemo(
+    () => [...checkedFiles].filter((p) => unstagedPaths.has(p)).length,
+    [checkedFiles, unstagedPaths],
+  );
+
+  const handleUnstageChecked = useCallback(async () => {
+    const paths = [...checkedFiles].filter((p) => stagedPaths.has(p));
+    if (paths.length === 0) return;
+    await onUnstagePaths(paths);
+    setCheckedFiles((prev) => {
+      const next = new Set(prev);
+      for (const p of paths) next.delete(p);
+      return next;
+    });
+  }, [checkedFiles, stagedPaths, onUnstagePaths]);
+
+  const handleStageChecked = useCallback(async () => {
+    const paths = [...checkedFiles].filter((p) => unstagedPaths.has(p));
+    if (paths.length === 0) return;
+    await onStagePaths(paths);
+    setCheckedFiles((prev) => {
+      const next = new Set(prev);
+      for (const p of paths) next.delete(p);
+      return next;
+    });
+  }, [checkedFiles, unstagedPaths, onStagePaths]);
 
   // When files change, expand any new folders that appear.
   const prevFilesRef = useRef(allFiles);
@@ -470,36 +590,30 @@ export function FileList({
       {/* Staged section */}
       <div className="flex-shrink-0">
         <div className="sticky top-0 flex items-center justify-between border-b border-theme-primary bg-theme-primary px-3 py-2">
-          <div className="flex items-center gap-2">
-            {/* Unstage all checkbox */}
-            {staged.length > 0 && (
-              <Tooltip content="Unstage all files">
+          <span className="text-xs font-medium text-green-400">
+            Staged ({staged.length})
+          </span>
+          <div className="flex items-center gap-1.5">
+            {checkedStagedCount > 0 && (
+              <Tooltip content={`Unstage ${checkedStagedCount} selected file${checkedStagedCount !== 1 ? "s" : ""}`}>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onUnstageAll();
-                  }}
-                  className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30"
-                  aria-label="Unstage all files"
+                  onClick={handleUnstageChecked}
+                  className="rounded px-1.5 py-0.5 text-xs text-red-400 hover:bg-red-900/20 transition-colors"
                 >
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
-                    className="h-3 w-3"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  Unstage ({checkedStagedCount})
                 </button>
               </Tooltip>
             )}
-            <span className="text-xs font-medium text-green-400">
-              Staged ({staged.length})
-            </span>
+            {staged.length > 0 && (
+              <Tooltip content="Unstage all files">
+                <button
+                  onClick={onUnstageAll}
+                  className="rounded px-1.5 py-0.5 text-xs text-theme-muted hover:bg-red-900/20 hover:text-red-400 transition-colors"
+                >
+                  Unstage all
+                </button>
+              </Tooltip>
+            )}
           </div>
         </div>
         {staged.length === 0 ? (
@@ -511,10 +625,12 @@ export function FileList({
             files={staged}
             isStaged={true}
             selectedFile={selectedFile}
+            checkedFiles={checkedFiles}
             expandedFolders={expandedFolders}
             onToggleFolder={handleToggleFolder}
             onSelectFile={(path) => onSelectFile(path, true)}
-            onToggleStage={onUnstageFile}
+            onToggleCheck={toggleChecked}
+            onToggleCheckBatch={toggleCheckedBatch}
           />
         ) : (
           <div className="p-1">
@@ -523,9 +639,9 @@ export function FileList({
                 key={`staged-${file.path}`}
                 file={file}
                 isSelected={selectedFile === file.path}
-                isStaged={true}
+                isChecked={checkedFiles.has(file.path)}
                 onSelect={() => onSelectFile(file.path, true)}
-                onToggle={() => onUnstageFile(file.path)}
+                onToggleCheck={() => toggleChecked(file.path)}
               />
             ))}
           </div>
@@ -535,37 +651,30 @@ export function FileList({
       {/* Unstaged section */}
       <div className="flex-1 overflow-y-auto">
         <div className="sticky top-0 flex items-center justify-between border-b border-t border-theme-primary bg-theme-primary px-3 py-2">
-          <div className="flex items-center gap-2">
-            {/* Stage all checkbox */}
-            {unstaged.length > 0 && (
-              <Tooltip content="Stage all files">
+          <span className="text-xs font-medium text-yellow-400">
+            Unstaged ({unstaged.length})
+          </span>
+          <div className="flex items-center gap-1.5">
+            {checkedUnstagedCount > 0 && (
+              <Tooltip content={`Stage ${checkedUnstagedCount} selected file${checkedUnstagedCount !== 1 ? "s" : ""}`}>
                 <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onStageAll();
-                  }}
-                  className="group flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border border-theme-primary text-theme-muted hover:border-green-500 hover:bg-green-500/10 hover:text-green-400"
-                  aria-label="Stage all files"
+                  onClick={handleStageChecked}
+                  className="rounded px-1.5 py-0.5 text-xs text-green-400 hover:bg-green-900/20 transition-colors"
                 >
-                  {/* Checkmark appears on hover to hint the action */}
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 16 16"
-                    fill="currentColor"
-                    className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60"
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  Stage ({checkedUnstagedCount})
                 </button>
               </Tooltip>
             )}
-            <span className="text-xs font-medium text-yellow-400">
-              Unstaged ({unstaged.length})
-            </span>
+            {unstaged.length > 0 && (
+              <Tooltip content="Stage all files">
+                <button
+                  onClick={onStageAll}
+                  className="rounded px-1.5 py-0.5 text-xs text-theme-muted hover:bg-green-900/20 hover:text-green-400 transition-colors"
+                >
+                  Stage all
+                </button>
+              </Tooltip>
+            )}
           </div>
         </div>
         {unstaged.length === 0 ? (
@@ -577,10 +686,12 @@ export function FileList({
             files={unstaged}
             isStaged={false}
             selectedFile={selectedFile}
+            checkedFiles={checkedFiles}
             expandedFolders={expandedFolders}
             onToggleFolder={handleToggleFolder}
             onSelectFile={(path) => onSelectFile(path, false)}
-            onToggleStage={onStageFile}
+            onToggleCheck={toggleChecked}
+            onToggleCheckBatch={toggleCheckedBatch}
           />
         ) : (
           <div className="p-1">
@@ -589,9 +700,9 @@ export function FileList({
                 key={`unstaged-${file.path}`}
                 file={file}
                 isSelected={selectedFile === file.path}
-                isStaged={false}
+                isChecked={checkedFiles.has(file.path)}
                 onSelect={() => onSelectFile(file.path, false)}
-                onToggle={() => onStageFile(file.path)}
+                onToggleCheck={() => toggleChecked(file.path)}
               />
             ))}
           </div>

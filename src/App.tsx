@@ -15,7 +15,6 @@ import { usePaneStore } from "./stores/panes";
 import { useSessionStore } from "./stores/sessions";
 import { useUiStore } from "./stores/ui";
 import { Layout } from "./components/Layout";
-import { Toolbar } from "./components/Toolbar";
 import { LayoutModal } from "./components/LayoutModal";
 import { useKeyboard } from "./hooks/useKeyboard";
 import { useMenuEvents } from "./hooks/useMenuEvents";
@@ -214,10 +213,6 @@ function App() {
   if (connectionState === "connected" && columns.length > 0) {
     return (
       <div className="flex h-screen w-screen flex-col overflow-hidden">
-        <Toolbar
-          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
-          onOpenLayoutModal={() => setLayoutModalOpen(true)}
-        />
         {shellFallback && (
           <div className="flex items-center justify-between bg-yellow-900/30 px-3 py-1 text-xs text-yellow-300">
             <span>

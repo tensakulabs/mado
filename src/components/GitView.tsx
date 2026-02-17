@@ -3,8 +3,6 @@ import {
   type FileDiff,
   gitStatus,
   gitFileDiff,
-  gitStageFile,
-  gitUnstageFile,
   gitStageFiles,
   gitUnstageFiles,
   gitStageHunk,
@@ -102,38 +100,6 @@ export function GitView({ sessionId, onClose }: GitViewProps) {
     [],
   );
 
-  const handleStageFile = useCallback(
-    async (path: string) => {
-      try {
-        await gitStageFile(sessionId, path);
-        await refreshStatus();
-        // If the selected file was just staged, update its staged status.
-        if (selectedFile === path) {
-          setSelectedFileIsStaged(true);
-        }
-      } catch (err) {
-        console.error("[GitView] Failed to stage file:", err);
-      }
-    },
-    [sessionId, refreshStatus, selectedFile],
-  );
-
-  const handleUnstageFile = useCallback(
-    async (path: string) => {
-      try {
-        await gitUnstageFile(sessionId, path);
-        await refreshStatus();
-        // If the selected file was just unstaged, update its staged status.
-        if (selectedFile === path) {
-          setSelectedFileIsStaged(false);
-        }
-      } catch (err) {
-        console.error("[GitView] Failed to unstage file:", err);
-      }
-    },
-    [sessionId, refreshStatus, selectedFile],
-  );
-
   const handleCommit = useCallback(
     async (message: string) => {
       if (staged.length === 0 || !message.trim()) return;
@@ -154,25 +120,37 @@ export function GitView({ sessionId, onClose }: GitViewProps) {
     [staged, sessionId, refreshStatus],
   );
 
-  const handleStageAll = useCallback(async () => {
+  const handleStagePaths = useCallback(async (paths: string[]) => {
     try {
-      // Stage all unstaged files in a single batch operation.
-      await gitStageFiles(sessionId, unstaged.map((f) => f.path));
+      await gitStageFiles(sessionId, paths);
       await refreshStatus();
+      if (selectedFile && paths.includes(selectedFile)) {
+        setSelectedFileIsStaged(true);
+      }
     } catch (err) {
-      console.error("[GitView] Failed to stage all:", err);
+      console.error("[GitView] Failed to stage files:", err);
     }
-  }, [sessionId, unstaged, refreshStatus]);
+  }, [sessionId, refreshStatus, selectedFile]);
+
+  const handleUnstagePaths = useCallback(async (paths: string[]) => {
+    try {
+      await gitUnstageFiles(sessionId, paths);
+      await refreshStatus();
+      if (selectedFile && paths.includes(selectedFile)) {
+        setSelectedFileIsStaged(false);
+      }
+    } catch (err) {
+      console.error("[GitView] Failed to unstage files:", err);
+    }
+  }, [sessionId, refreshStatus, selectedFile]);
+
+  const handleStageAll = useCallback(async () => {
+    await handleStagePaths(unstaged.map((f) => f.path));
+  }, [unstaged, handleStagePaths]);
 
   const handleUnstageAll = useCallback(async () => {
-    try {
-      // Unstage all staged files in a single batch operation.
-      await gitUnstageFiles(sessionId, staged.map((f) => f.path));
-      await refreshStatus();
-    } catch (err) {
-      console.error("[GitView] Failed to unstage all:", err);
-    }
-  }, [sessionId, staged, refreshStatus]);
+    await handleUnstagePaths(staged.map((f) => f.path));
+  }, [staged, handleUnstagePaths]);
 
   const handleStageHunk = useCallback(
     async (hunkIndex: number) => {
@@ -253,10 +231,10 @@ export function GitView({ sessionId, onClose }: GitViewProps) {
             selectedFile={selectedFile}
             viewMode={viewMode}
             onSelectFile={handleSelectFile}
-            onStageFile={handleStageFile}
-            onUnstageFile={handleUnstageFile}
             onStageAll={handleStageAll}
             onUnstageAll={handleUnstageAll}
+            onStagePaths={handleStagePaths}
+            onUnstagePaths={handleUnstagePaths}
           />
         </div>
 

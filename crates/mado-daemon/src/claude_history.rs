@@ -321,11 +321,40 @@ pub fn list_session_summaries(working_dir: &Path, limit: Option<usize>) -> Resul
     Ok(infos)
 }
 
+/// Import history for a specific CLI session by its ID.
+/// The `session_id` should be the UUID stem of a `.jsonl` file in the project sessions directory.
+pub fn import_session_by_id(
+    working_dir: &Path,
+    session_id: &str,
+    limit: Option<usize>,
+) -> Result<Vec<Message>, HistoryError> {
+    let project_dir = find_project_dir(working_dir)
+        .ok_or_else(|| HistoryError::ProjectNotFound(working_dir.to_path_buf()))?;
+
+    let session_file = project_dir.join(format!("{}.jsonl", session_id));
+    if !session_file.exists() {
+        return Err(HistoryError::SessionNotFound(session_id.to_string()));
+    }
+
+    let mut messages = parse_session(&session_file)?;
+
+    // Apply limit.
+    if let Some(lim) = limit {
+        let start = messages.len().saturating_sub(lim);
+        messages = messages[start..].to_vec();
+    }
+
+    Ok(messages)
+}
+
 /// Errors from history import.
 #[derive(Debug, thiserror::Error)]
 pub enum HistoryError {
     #[error("Project not found for path: {0}")]
     ProjectNotFound(PathBuf),
+
+    #[error("Session not found: {0}")]
+    SessionNotFound(String),
 
     #[error("IO error: {0}")]
     IoError(#[from] std::io::Error),

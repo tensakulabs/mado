@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useCallback, useState, useRef } from "react";
 import { useSessionStore } from "../stores/sessions";
+import { useConversationStore } from "../stores/conversations";
 import { usePaneStore } from "../stores/panes";
 import { ConfirmDialog } from "./ui/confirm-dialog";
 import { Tooltip } from "./Tooltip";
@@ -29,6 +30,7 @@ export function SessionSidebar({ paneId, sessionId, onClose }: SessionSidebarPro
   const fetchCliSessions = useSessionStore((s) => s.fetchCliSessions);
   const destroySession = useSessionStore((s) => s.destroySession);
   const createSession = useSessionStore((s) => s.createSession);
+  const linkClaudeSession = useSessionStore((s) => s.linkClaudeSession);
   const replaceSession = usePaneStore((s) => s.replaceSession);
 
   // State for delete confirmation dialog.
@@ -78,8 +80,8 @@ export function SessionSidebar({ paneId, sessionId, onClose }: SessionSidebarPro
       } else {
         if (s.working_dir) continue;
       }
-      // Filter out empty sessions unless active.
-      if (s.message_count === 0 && s.id !== currentSessionId) continue;
+      // Filter out empty sessions unless active or linked to a CLI session.
+      if (s.message_count === 0 && s.id !== currentSessionId && !s.claude_session_id) continue;
 
       items.push({
         id: s.id,
@@ -219,7 +221,7 @@ export function SessionSidebar({ paneId, sessionId, onClose }: SessionSidebarPro
           return;
         }
 
-        // No existing Mado session — create one.
+        // No existing Mado session — create one linked to this CLI session.
         if (!currentWorkingDir) return;
         try {
           const session = await createSession(
@@ -229,13 +231,18 @@ export function SessionSidebar({ paneId, sessionId, onClose }: SessionSidebarPro
             80,
             currentWorkingDir,
           );
+          // Link the new Mado session to the CLI session so future clicks
+          // find it via claude_session_id and the sidebar dedup filter works.
+          linkClaudeSession(session.id, item.id);
           replaceSession(paneId, session.id);
+          // Import this specific CLI session's history into the conversation.
+          useConversationStore.getState().loadHistory(session.id, undefined, item.id);
         } catch (err) {
           console.error("Failed to open CLI session:", err);
         }
       }
     },
-    [paneId, currentWorkingDir, sessions, createSession, replaceSession],
+    [paneId, currentWorkingDir, sessions, createSession, linkClaudeSession, replaceSession],
   );
 
   const formatTimestamp = (ts: string) => {

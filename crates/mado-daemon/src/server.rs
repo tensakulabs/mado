@@ -197,7 +197,10 @@ pub async fn start_server(
 /// Create the shared app state with session and process managers.
 fn create_app_state(daemon_state: Arc<Mutex<DaemonState>>, state_path: PathBuf) -> AppState {
     let process_manager = new_shared_process_manager();
-    let session_manager = Arc::new(SessionManager::new(daemon_state.clone(), process_manager));
+    let session_manager = Arc::new(
+        SessionManager::new(daemon_state.clone(), process_manager)
+            .with_state_path(state_path.clone()),
+    );
 
     // Create conversation manager with storage in ~/.mado/conversations/.
     let storage_dir = dirs::home_dir()
@@ -525,6 +528,9 @@ pub struct ImportHistoryQuery {
     pub limit: Option<usize>,
     #[serde(default)]
     pub all_sessions: Option<bool>,
+    /// If provided, import a specific CLI session by its ID (UUID file stem).
+    #[serde(default)]
+    pub target_session_id: Option<String>,
 }
 
 async fn import_history_handler(
@@ -551,14 +557,26 @@ async fn import_history_handler(
 
     let path = std::path::Path::new(&working_dir);
 
-    let result = if params.all_sessions.unwrap_or(false) {
+    let result = if let Some(ref target_id) = params.target_session_id {
+        crate::claude_history::import_session_by_id(path, target_id, params.limit)
+    } else if params.all_sessions.unwrap_or(false) {
         crate::claude_history::import_all_history(path, params.limit)
     } else {
         crate::claude_history::import_history(path, params.limit)
     };
 
     match result {
-        Ok(messages) => Json(DaemonResponse::Messages { messages }),
+        Ok(messages) => {
+            // When importing a targeted CLI session, set the Mado session's
+            // claude_session_id so future messages use `claude --resume <id>`.
+            if let Some(ref target_id) = params.target_session_id {
+                state
+                    .session_manager
+                    .set_claude_session_id(&session_id, target_id)
+                    .await;
+            }
+            Json(DaemonResponse::Messages { messages })
+        }
         Err(e) => Json(DaemonResponse::Error {
             message: e.to_string(),
         }),

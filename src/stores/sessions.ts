@@ -16,8 +16,6 @@ interface SessionState {
   defaultModel: string;
   // Per-session model overrides (sessionId -> model).
   modelOverrides: Map<string, string>;
-  // Sessions where the user explicitly chose a workspace folder.
-  explicitWorkspaces: Set<string>;
 }
 
 interface SessionActions {
@@ -39,8 +37,8 @@ interface SessionActions {
   setSessionModel: (sessionId: string, model: string) => void;
   // Update session's working directory.
   updateWorkingDir: (sessionId: string, workingDir: string) => Promise<void>;
-  // Check if user explicitly chose a workspace for this session.
-  hasExplicitWorkspace: (sessionId: string) => boolean;
+  // Link a Mado session to a CLI session (sets claude_session_id locally).
+  linkClaudeSession: (sessionId: string, claudeSessionId: string) => void;
 }
 
 export const useSessionStore = create<SessionState & SessionActions>()(
@@ -51,7 +49,6 @@ export const useSessionStore = create<SessionState & SessionActions>()(
     error: null,
     defaultModel: "sonnet",
     modelOverrides: new Map(),
-    explicitWorkspaces: new Set(),
 
     fetchSessions: async () => {
       set({ isLoading: true, error: null });
@@ -79,28 +76,19 @@ export const useSessionStore = create<SessionState & SessionActions>()(
       cols: number,
       cwd?: string,
     ) => {
-      // Deduplicate session names: if "name" already exists, append (2), (3), etc.
-      const existingNames = new Set(get().sessions.map((s) => s.name));
-      let dedupedName = name;
-      if (existingNames.has(dedupedName)) {
-        let counter = 2;
-        while (existingNames.has(`${name} (${counter})`)) {
-          counter++;
-        }
-        dedupedName = `${name} (${counter})`;
+      // Reuse an existing empty session with the same workspace instead of
+      // creating a new one.
+      if (cwd) {
+        const existing = get().sessions.find(
+          (s) => s.message_count === 0 && s.working_dir === cwd,
+        );
+        if (existing) return existing;
       }
 
-      const session = await ipcCreateSession(dedupedName, model, rows, cols, cwd);
-      set((state) => {
-        const explicitWorkspaces = new Set(state.explicitWorkspaces);
-        if (cwd) {
-          explicitWorkspaces.add(session.id);
-        }
-        return {
-          sessions: [...state.sessions, session],
-          explicitWorkspaces,
-        };
-      });
+      const session = await ipcCreateSession(name, model, rows, cols, cwd);
+      set((state) => ({
+        sessions: [...state.sessions, session],
+      }));
       return session;
     },
 
@@ -148,8 +136,13 @@ export const useSessionStore = create<SessionState & SessionActions>()(
       }));
     },
 
-    hasExplicitWorkspace: (sessionId: string) => {
-      return get().explicitWorkspaces.has(sessionId);
+    linkClaudeSession: (sessionId: string, claudeSessionId: string) => {
+      set((state) => ({
+        sessions: state.sessions.map((s) =>
+          s.id === sessionId ? { ...s, claude_session_id: claudeSessionId } : s,
+        ),
+      }));
     },
+
   }),
 );

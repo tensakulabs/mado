@@ -646,11 +646,13 @@ impl DaemonClient {
     }
 
     /// Import Claude CLI history for a session's working directory.
+    /// If `target_cli_session_id` is provided, imports that specific CLI session.
     pub async fn import_history(
         &self,
         session_id: &str,
         limit: Option<usize>,
         all_sessions: Option<bool>,
+        target_cli_session_id: Option<&str>,
     ) -> Result<Vec<crate::types::Message>, ClientError> {
         let mut path = format!("/sessions/{}/history", session_id);
         let mut params = Vec::new();
@@ -659,6 +661,9 @@ impl DaemonClient {
         }
         if let Some(all) = all_sessions {
             params.push(format!("all_sessions={}", all));
+        }
+        if let Some(target_id) = target_cli_session_id {
+            params.push(format!("target_session_id={}", target_id));
         }
         if !params.is_empty() {
             path.push('?');

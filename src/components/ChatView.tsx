@@ -111,7 +111,6 @@ export function ChatView({ sessionId }: ChatViewProps) {
   const subscribeToStream = useConversationStore((s) => s.subscribeToStream);
   const getSessionModel = useSessionStore((s) => s.getSessionModel);
   const setSessionModel = useSessionStore((s) => s.setSessionModel);
-  const hasExplicitWorkspace = useSessionStore((s) => s.hasExplicitWorkspace);
 
   // Track if initial load is complete
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -170,14 +169,15 @@ export function ChatView({ sessionId }: ChatViewProps) {
       initSession(sessionId);
       subscribeToStream(sessionId);
       const loads: Promise<void>[] = [loadMessages(sessionId)];
-      if (hasExplicitWorkspace(sessionId)) {
-        loads.push(loadHistory(sessionId));
+      const session = useSessionStore.getState().getSession(sessionId);
+      if (session?.working_dir) {
+        loads.push(loadHistory(sessionId, undefined, session.claude_session_id));
       }
       Promise.all(loads).finally(() => {
         setIsInitialLoading(false);
       });
     }
-  }, [sessionId, initSession, loadMessages, loadHistory, subscribeToStream, hasExplicitWorkspace]);
+  }, [sessionId, initSession, loadMessages, loadHistory, subscribeToStream]);
 
   // Auto-scroll to bottom when new messages arrive.
   useEffect(() => {

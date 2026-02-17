@@ -14,6 +14,7 @@ use crate::state::DaemonState;
 pub struct SessionManager {
     state: Arc<Mutex<DaemonState>>,
     process_manager: SharedProcessManager,
+    state_path: Option<std::path::PathBuf>,
 }
 
 impl SessionManager {
@@ -21,7 +22,14 @@ impl SessionManager {
         Self {
             state,
             process_manager,
+            state_path: None,
         }
+    }
+
+    /// Create a SessionManager with a state persistence path.
+    pub fn with_state_path(mut self, path: std::path::PathBuf) -> Self {
+        self.state_path = Some(path);
+        self
     }
 
     /// Create a new session with a Claude CLI (or fallback shell) process.
@@ -160,6 +168,29 @@ impl SessionManager {
         let pm = self.process_manager.lock().await;
         pm.subscribe_output(id)
             .map_err(SessionError::ProcessError)
+    }
+
+    /// Update a session's `claude_session_id` and persist to disk.
+    pub async fn set_claude_session_id(
+        &self,
+        id: &SessionId,
+        claude_session_id: &str,
+    ) {
+        let mut state = self.state.lock().await;
+        if let Some(session) = state.sessions.get_mut(id.as_str()) {
+            session.claude_session_id = Some(claude_session_id.to_string());
+            if let Some(ref state_path) = self.state_path {
+                if let Err(e) = state.save(state_path) {
+                    tracing::error!("Failed to persist daemon state: {}", e);
+                } else {
+                    tracing::debug!(
+                        "Persisted claude_session_id {} for session {}",
+                        claude_session_id,
+                        id
+                    );
+                }
+            }
+        }
     }
 }
 

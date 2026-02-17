@@ -32,7 +32,7 @@ interface ConversationStoreActions {
   loadMessages: (sessionId: string) => Promise<void>;
 
   // Load Claude CLI history for the session's working directory.
-  loadHistory: (sessionId: string, limit?: number) => Promise<void>;
+  loadHistory: (sessionId: string, limit?: number, targetCliSessionId?: string) => Promise<void>;
 
   // Send a message.
   sendMessage: (sessionId: string, content: string, model?: string) => Promise<void>;
@@ -119,11 +119,11 @@ export const useConversationStore = create<
     }
   },
 
-  loadHistory: async (sessionId: string, limit?: number) => {
+  loadHistory: async (sessionId: string, limit?: number, targetCliSessionId?: string) => {
     get().initSession(sessionId);
 
     try {
-      const history = await ipcImportHistory(sessionId, limit);
+      const history = await ipcImportHistory(sessionId, limit, undefined, targetCliSessionId);
       if (history.length > 0) {
         set((state) => {
           const newSessions = new Map(state.sessions);

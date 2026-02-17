@@ -439,13 +439,21 @@ export async function cancelResponse(sessionId: string): Promise<void> {
 /**
  * Import Claude CLI history for a session's working directory.
  * Returns messages from Claude CLI sessions in that folder.
+ * If `targetCliSessionId` is provided, imports that specific CLI session
+ * and sets the Mado session's claude_session_id for future `--resume`.
  */
 export async function importHistory(
   sessionId: string,
   limit?: number,
   allSessions?: boolean,
+  targetCliSessionId?: string,
 ): Promise<Message[]> {
-  return invoke<Message[]>("import_history", { sessionId, limit, allSessions });
+  return invoke<Message[]>("import_history", {
+    sessionId,
+    limit,
+    allSessions,
+    targetCliSessionId,
+  });
 }
 
 /**
