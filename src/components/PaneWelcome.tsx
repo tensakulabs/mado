@@ -59,7 +59,7 @@ export function PaneWelcome({ paneId }: PaneWelcomeProps) {
         <div className="max-w-md text-center">
           <div className="mb-6 text-5xl">📁</div>
           <h2 className="mb-2 text-xl font-medium text-theme-primary">
-            Welcome to Kobo
+            Welcome to Mado
           </h2>
           <p className="mb-8 text-sm text-theme-muted">
             Choose a workspace folder to give your AI context about your project,

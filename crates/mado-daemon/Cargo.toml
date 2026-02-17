@@ -3,7 +3,7 @@ name = "mado-daemon"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Background daemon for Kobo - manages Claude CLI sessions"
+description = "Background daemon for Mado - manages Claude CLI sessions"
 
 [[bin]]
 name = "mado-daemon"

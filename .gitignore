@@ -17,4 +17,4 @@ dist/
 *.swo
 
 # Runtime
-.kobo/
+.mado/

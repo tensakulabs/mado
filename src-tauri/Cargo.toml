@@ -3,7 +3,7 @@ name = "mado-tauri"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Kobo desktop app - Tauri shell connecting to mado-daemon"
+description = "Mado desktop app - Tauri shell connecting to mado-daemon"
 
 [lib]
 name = "mado_tauri_lib"

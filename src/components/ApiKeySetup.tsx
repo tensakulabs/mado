@@ -173,7 +173,7 @@ export function ApiKeySetup({ onComplete }: ApiKeySetupProps) {
     return (
       <div className="flex h-screen w-screen flex-col items-center justify-center gap-8 p-8 bg-theme-primary select-none">
         <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-theme-primary">Kobo</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-theme-primary">Mado</h1>
           <p className="mt-2 text-sm text-theme-muted">
             Choose your AI provider to get started
           </p>
@@ -209,7 +209,7 @@ export function ApiKeySetup({ onComplete }: ApiKeySetupProps) {
     return (
       <div className="flex h-screen w-screen flex-col items-center justify-center gap-8 p-8 bg-theme-primary select-none">
         <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-theme-primary">Kobo</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-theme-primary">Mado</h1>
           <p className="mt-2 text-sm text-theme-muted">
             How do you want to authenticate?
           </p>
@@ -256,7 +256,7 @@ export function ApiKeySetup({ onComplete }: ApiKeySetupProps) {
     return (
       <div className="flex h-screen w-screen flex-col items-center justify-center gap-8 p-8 bg-theme-primary">
         <div className="text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-theme-primary">Kobo</h1>
+          <h1 className="text-4xl font-bold tracking-tight text-theme-primary">Mado</h1>
           <p className="mt-2 text-sm text-theme-muted">
             Connect to {selectedProvider.name}
           </p>

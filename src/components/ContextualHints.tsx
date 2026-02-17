@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
 
-const HINTS_DISMISSED_KEY = "kobo-hints-dismissed";
+const HINTS_DISMISSED_KEY = "mado-hints-dismissed";
 const HINTS = [
   {
     id: "welcome",
     message:
-      "Welcome to Kobo! Start typing to chat. Use Cmd+K to open the command palette.",
+      "Welcome to Mado! Start typing to chat. Use Cmd+K to open the command palette.",
     showAfterMs: 1000,
   },
   {
