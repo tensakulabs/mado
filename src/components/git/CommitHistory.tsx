@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { type GitLogEntry, gitLog } from "../../lib/ipc";
+import { Tooltip } from "../Tooltip";
 
 interface CommitHistoryProps {
   /** Session ID for git operations. */
@@ -96,24 +97,26 @@ export function CommitHistory({ sessionId, limit = 20 }: CommitHistoryProps) {
         <span className="text-xs font-medium text-theme-secondary">
           Commit History
         </span>
-        <button
-          onClick={refresh}
-          className="rounded p-1 text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
-          title="Refresh"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            viewBox="0 0 16 16"
-            fill="currentColor"
-            className="h-3 w-3"
+        <Tooltip content="Refresh">
+          <button
+            onClick={refresh}
+            className="rounded p-1 text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
+            aria-label="Refresh"
           >
-            <path
-              fillRule="evenodd"
-              d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.681.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-.908l.84.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44.908l-.84-.84v1.836a.75.75 0 0 1-1.5 0V9.723a.75.75 0 0 1 .75-.75h3.182a.75.75 0 0 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.681.75.75 0 0 1 1.025-.274Z"
-              clipRule="evenodd"
-            />
-          </svg>
-        </button>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 16 16"
+              fill="currentColor"
+              className="h-3 w-3"
+            >
+              <path
+                fillRule="evenodd"
+                d="M13.836 2.477a.75.75 0 0 1 .75.75v3.182a.75.75 0 0 1-.75.75h-3.182a.75.75 0 0 1 0-1.5h1.37l-.84-.841a4.5 4.5 0 0 0-7.08.681.75.75 0 0 1-1.3-.75 6 6 0 0 1 9.44-.908l.84.84V3.227a.75.75 0 0 1 .75-.75Zm-.911 7.5A.75.75 0 0 1 13.199 11a6 6 0 0 1-9.44.908l-.84-.84v1.836a.75.75 0 0 1-1.5 0V9.723a.75.75 0 0 1 .75-.75h3.182a.75.75 0 0 1 0 1.5H3.98l.841.841a4.5 4.5 0 0 0 7.08-.681.75.75 0 0 1 1.025-.274Z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </button>
+        </Tooltip>
       </div>
 
       {/* Commit list */}

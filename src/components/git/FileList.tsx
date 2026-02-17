@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { type FileDiff } from "../../lib/ipc";
+import { Tooltip } from "../Tooltip";
 
 interface FileListProps {
   staged: FileDiff[];
   unstaged: FileDiff[];
   selectedFile: string | null;
   viewMode: "list" | "tree";
-  onSelectFile: (path: string) => void;
+  onSelectFile: (path: string, isStaged: boolean) => void;
   onStageFile: (path: string) => void;
   onUnstageFile: (path: string) => void;
   onStageAll: () => void;
@@ -67,18 +68,19 @@ function FileRow({ file, isSelected, isStaged, displayName, showFileIcon, onSele
       }`}
     >
       {/* Stage/unstage toggle */}
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle();
-        }}
-        className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
-          isStaged
-            ? "border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30"
-            : "border-theme-primary text-theme-muted hover:border-theme-secondary hover:bg-theme-tertiary"
-        }`}
-        title={isStaged ? "Unstage file" : "Stage file"}
-      >
+      <Tooltip content={isStaged ? "Unstage file" : "Stage file"}>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+          className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors ${
+            isStaged
+              ? "border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30"
+              : "border-theme-primary text-theme-muted hover:border-theme-secondary hover:bg-theme-tertiary"
+          }`}
+          aria-label={isStaged ? "Unstage file" : "Stage file"}
+        >
         {isStaged && (
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -93,13 +95,15 @@ function FileRow({ file, isSelected, isStaged, displayName, showFileIcon, onSele
             />
           </svg>
         )}
-      </button>
+        </button>
+      </Tooltip>
 
       {/* Status dot */}
-      <span
-        className={`h-2 w-2 flex-shrink-0 rounded-full ${statusColor(file.status)}`}
-        title={statusLabel(file.status)}
-      />
+      <Tooltip content={statusLabel(file.status)}>
+        <span
+          className={`h-2 w-2 flex-shrink-0 rounded-full ${statusColor(file.status)}`}
+        />
+      </Tooltip>
 
       {/* File icon (tree view only) */}
       {showFileIcon && <FileIcon className="h-3.5 w-3.5 flex-shrink-0 text-theme-muted" />}
@@ -203,7 +207,8 @@ function FolderIcon({ className }: { className?: string }) {
       fill="currentColor"
       className={className ?? "h-3.5 w-3.5"}
     >
-      <path d="M2 3.5A1.5 1.5 0 0 1 3.5 2h2.879a1.5 1.5 0 0 1 1.06.44l1.122 1.12A1.5 1.5 0 0 0 9.62 4H12.5A1.5 1.5 0 0 1 14 5.5v7a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 12.5v-9Z" />
+      <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.879a1.5 1.5 0 0 1 1.06.44l1.122 1.12A1.5 1.5 0 0 0 9.62 5H12.5A1.5 1.5 0 0 1 14 6.5v1.384l-2.162 3.243A1.75 1.75 0 0 1 10.382 12H2.476a.476.476 0 0 1-.396-.737L4.677 7H2V4.5Z" />
+      <path d="M5.25 7 2.5 11.25h7.882a.25.25 0 0 0 .208-.112L13.34 7H5.25Z" />
     </svg>
   );
 }
@@ -230,7 +235,7 @@ interface TreeNodeRendererProps {
   selectedFile: string | null;
   expandedFolders: Set<string>;
   onToggleFolder: (path: string) => void;
-  onSelectFile: (path: string) => void;
+  onSelectFile: (path: string, isStaged: boolean) => void;
   onToggleStage: (path: string) => void;
 }
 
@@ -254,7 +259,7 @@ function TreeNodeRenderer({
           isStaged={isStaged}
           displayName={node.name}
           showFileIcon
-          onSelect={() => onSelectFile(node.file!.path)}
+          onSelect={() => onSelectFile(node.file!.path, isStaged)}
           onToggle={() => onToggleStage(node.file!.path)}
         />
       </div>
@@ -311,7 +316,7 @@ interface FileTreeViewProps {
   selectedFile: string | null;
   expandedFolders: Set<string>;
   onToggleFolder: (path: string) => void;
-  onSelectFile: (path: string) => void;
+  onSelectFile: (path: string, isStaged: boolean) => void;
   onToggleStage: (path: string) => void;
 }
 
@@ -437,14 +442,14 @@ export function FileList({
       if (e.key === "ArrowDown") {
         e.preventDefault();
         const next = currentIndex < allFiles.length - 1 ? currentIndex + 1 : 0;
-        onSelectFile(allFiles[next].path);
+        onSelectFile(allFiles[next].path, next < staged.length);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         const prev = currentIndex > 0 ? currentIndex - 1 : allFiles.length - 1;
-        onSelectFile(allFiles[prev].path);
+        onSelectFile(allFiles[prev].path, prev < staged.length);
       }
     },
-    [allFiles, selectedFile, onSelectFile],
+    [allFiles, staged.length, selectedFile, onSelectFile],
   );
 
   useEffect(() => {
@@ -468,27 +473,29 @@ export function FileList({
           <div className="flex items-center gap-2">
             {/* Unstage all checkbox */}
             {staged.length > 0 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUnstageAll();
-                }}
-                className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30"
-                title="Unstage all files"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 16 16"
-                  fill="currentColor"
-                  className="h-3 w-3"
+              <Tooltip content="Unstage all files">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUnstageAll();
+                  }}
+                  className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border border-green-500 bg-green-500/20 text-green-400 hover:bg-green-500/30"
+                  aria-label="Unstage all files"
                 >
-                  <path
-                    fillRule="evenodd"
-                    d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </button>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    className="h-3 w-3"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              </Tooltip>
             )}
             <span className="text-xs font-medium text-green-400">
               Staged ({staged.length})
@@ -506,7 +513,7 @@ export function FileList({
             selectedFile={selectedFile}
             expandedFolders={expandedFolders}
             onToggleFolder={handleToggleFolder}
-            onSelectFile={onSelectFile}
+            onSelectFile={(path) => onSelectFile(path, true)}
             onToggleStage={onUnstageFile}
           />
         ) : (
@@ -517,7 +524,7 @@ export function FileList({
                 file={file}
                 isSelected={selectedFile === file.path}
                 isStaged={true}
-                onSelect={() => onSelectFile(file.path)}
+                onSelect={() => onSelectFile(file.path, true)}
                 onToggle={() => onUnstageFile(file.path)}
               />
             ))}
@@ -531,28 +538,30 @@ export function FileList({
           <div className="flex items-center gap-2">
             {/* Stage all checkbox */}
             {unstaged.length > 0 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStageAll();
-                }}
-                className="group flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border border-theme-primary text-theme-muted hover:border-green-500 hover:bg-green-500/10 hover:text-green-400"
-                title="Stage all files"
-              >
-                {/* Checkmark appears on hover to hint the action */}
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 16 16"
-                  fill="currentColor"
-                  className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60"
+              <Tooltip content="Stage all files">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStageAll();
+                  }}
+                  className="group flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border border-theme-primary text-theme-muted hover:border-green-500 hover:bg-green-500/10 hover:text-green-400"
+                  aria-label="Stage all files"
                 >
-                  <path
-                    fillRule="evenodd"
-                    d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-              </button>
+                  {/* Checkmark appears on hover to hint the action */}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    fill="currentColor"
+                    className="h-2.5 w-2.5 opacity-0 group-hover:opacity-60"
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+              </Tooltip>
             )}
             <span className="text-xs font-medium text-yellow-400">
               Unstaged ({unstaged.length})
@@ -570,7 +579,7 @@ export function FileList({
             selectedFile={selectedFile}
             expandedFolders={expandedFolders}
             onToggleFolder={handleToggleFolder}
-            onSelectFile={onSelectFile}
+            onSelectFile={(path) => onSelectFile(path, false)}
             onToggleStage={onStageFile}
           />
         ) : (
@@ -581,7 +590,7 @@ export function FileList({
                 file={file}
                 isSelected={selectedFile === file.path}
                 isStaged={false}
-                onSelect={() => onSelectFile(file.path)}
+                onSelect={() => onSelectFile(file.path, false)}
                 onToggle={() => onStageFile(file.path)}
               />
             ))}

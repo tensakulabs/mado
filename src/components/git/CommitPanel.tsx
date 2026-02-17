@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { Tooltip } from "../Tooltip";
 
 interface CommitPanelProps {
   stagedCount: number;
@@ -69,18 +70,19 @@ export function CommitPanel({ stagedCount, onCommit, disabled }: CommitPanelProp
           </span>
 
           {/* Commit button */}
-          <button
-            onClick={handleCommit}
-            disabled={!canCommit}
-            className={`rounded px-4 py-1.5 text-xs font-medium transition-colors ${
-              canCommit
-                ? "bg-green-600 text-white hover:bg-green-500"
-                : "bg-theme-tertiary text-theme-muted cursor-not-allowed"
-            }`}
-            title="Commit staged changes (Ctrl+Enter)"
-          >
-            Commit
-          </button>
+          <Tooltip content="Commit staged changes (Ctrl+Enter)">
+            <button
+              onClick={handleCommit}
+              disabled={!canCommit}
+              className={`rounded px-4 py-1.5 text-xs font-medium transition-colors ${
+                canCommit
+                  ? "bg-green-600 text-white hover:bg-green-500"
+                  : "bg-theme-tertiary text-theme-muted cursor-not-allowed"
+              }`}
+            >
+              Commit
+            </button>
+          </Tooltip>
         </div>
       </div>
     </div>

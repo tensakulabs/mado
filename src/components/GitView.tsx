@@ -10,6 +10,7 @@ import {
   gitStageHunk,
   gitCommit,
 } from "../lib/ipc";
+import { Tooltip } from "./Tooltip";
 import { FileList } from "./git/FileList";
 import { DiffViewer } from "./git/DiffViewer";
 import { CommitPanel } from "./git/CommitPanel";
@@ -94,13 +95,11 @@ export function GitView({ sessionId, onClose }: GitViewProps) {
   }, [selectedFile, selectedFileIsStaged, sessionId]);
 
   const handleSelectFile = useCallback(
-    (path: string) => {
+    (path: string, isStaged: boolean) => {
       setSelectedFile(path);
-      // Determine if this file is in the staged list.
-      const isStaged = staged.some((f) => f.path === path);
       setSelectedFileIsStaged(isStaged);
     },
-    [staged],
+    [],
   );
 
   const handleStageFile = useCallback(
@@ -197,22 +196,24 @@ export function GitView({ sessionId, onClose }: GitViewProps) {
       {/* Top bar with title and close button */}
       <div className="flex items-center justify-between border-b border-theme-primary bg-theme-primary px-3 py-1.5">
         <div className="flex items-center gap-3">
-          <button
-            onClick={onClose}
-            className="rounded px-2 py-0.5 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
-            title="Close Git View (Escape)"
-          >
-            &larr; Back
-          </button>
+          <Tooltip content="Close Git View (Escape)">
+            <button
+              onClick={onClose}
+              className="rounded px-2 py-0.5 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
+            >
+              &larr; Back
+            </button>
+          </Tooltip>
           <span className="text-xs font-medium text-theme-secondary">
             Git Changes
           </span>
           {/* List/Tree view toggle */}
-          <button
-            onClick={() => setViewMode(viewMode === "list" ? "tree" : "list")}
-            className="flex items-center justify-center rounded p-1 text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
-            title={viewMode === "list" ? "Switch to tree view" : "Switch to list view"}
-          >
+          <Tooltip content={viewMode === "list" ? "Switch to tree view" : "Switch to list view"}>
+            <button
+              onClick={() => setViewMode(viewMode === "list" ? "tree" : "list")}
+              className="flex items-center justify-center rounded p-1 text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
+              aria-label={viewMode === "list" ? "Switch to tree view" : "Switch to list view"}
+            >
             {viewMode === "list" ? (
               // List icon
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" className="h-3.5 w-3.5">
@@ -224,13 +225,16 @@ export function GitView({ sessionId, onClose }: GitViewProps) {
                 <path fillRule="evenodd" d="M1 3.5A1.5 1.5 0 0 1 2.5 2h3A1.5 1.5 0 0 1 7 3.5v1A1.5 1.5 0 0 1 5.5 6H5v1h3.5A1.5 1.5 0 0 1 10 8.5v1a1.5 1.5 0 0 1-1.5 1.5H8v1h2.5a1.5 1.5 0 0 1 1.5 1.5v1a1.5 1.5 0 0 1-1.5 1.5h-3A1.5 1.5 0 0 1 6 13.5v-1A1.5 1.5 0 0 1 7.5 11H8v-1H5.5A1.5 1.5 0 0 1 4 8.5v-1A1.5 1.5 0 0 1 5.5 6H5V5h-.5A1.5 1.5 0 0 1 3 3.5v-1Z" clipRule="evenodd" />
               </svg>
             )}
-          </button>
+            </button>
+          </Tooltip>
         </div>
         <div className="flex items-center gap-2 text-xs text-theme-muted">
           {error && (
-            <span className="text-red-400 mr-2" title={error}>
-              Error loading status
-            </span>
+            <Tooltip content={error}>
+              <span className="text-red-400 mr-2">
+                Error loading status
+              </span>
+            </Tooltip>
           )}
           <span>
             {staged.length + unstaged.length} file

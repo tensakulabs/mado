@@ -2,6 +2,7 @@ import { useMemo, useRef, useCallback, useEffect, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { parseDiff, lineClasses, linePrefix } from "../../lib/diff-parser";
 import type { DiffLine } from "../../lib/diff-parser";
+import { Tooltip } from "../Tooltip";
 
 interface DiffFullscreenProps {
   open: boolean;
@@ -33,11 +34,23 @@ function TruncatedPath({ path }: { path: string }) {
     return () => window.removeEventListener("resize", checkTruncation);
   }, [checkTruncation, path]);
 
+  if (isTruncated) {
+    return (
+      <Tooltip content={path} position="bottom">
+        <span
+          ref={ref}
+          className="truncate max-w-[60vw] inline-block align-bottom"
+        >
+          {path}
+        </span>
+      </Tooltip>
+    );
+  }
+
   return (
     <span
       ref={ref}
       className="truncate max-w-[60vw] inline-block align-bottom"
-      title={isTruncated ? path : undefined}
     >
       {path}
     </span>

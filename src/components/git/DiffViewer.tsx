@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { parseDiff, lineClasses, linePrefix } from "../../lib/diff-parser";
 import type { DiffLine } from "../../lib/diff-parser";
 import { DiffFullscreen } from "./DiffFullscreen";
+import { Tooltip } from "../Tooltip";
 
 // Re-export isDiffContent for consumers who need the detection helper.
 export { isDiffContent } from "../../lib/diff-parser";
@@ -57,26 +58,27 @@ export function DiffViewer({
             </span>
           )}
           {/* Expand to fullscreen */}
-          <button
-            onClick={() => setFullscreenOpen(true)}
-            className="rounded p-1 text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary transition-colors"
-            title="View diff fullscreen"
-            aria-label="Expand diff to fullscreen"
-          >
-            <svg
-              width="14"
-              height="14"
-              viewBox="0 0 16 16"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          <Tooltip content="View diff fullscreen">
+            <button
+              onClick={() => setFullscreenOpen(true)}
+              className="rounded p-1 text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary transition-colors"
+              aria-label="Expand diff to fullscreen"
             >
-              {/* Expand arrows icon */}
-              <path d="M10 2h4v4M6 14H2v-4M14 2L9.5 6.5M2 14l4.5-4.5" />
-            </svg>
-          </button>
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                {/* Expand arrows icon */}
+                <path d="M10 2h4v4M6 14H2v-4M14 2L9.5 6.5M2 14l4.5-4.5" />
+              </svg>
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -94,13 +96,15 @@ export function DiffViewer({
                   {line.type === "hunk-header" &&
                     !isStaged &&
                     onStageHunk && (
-                      <button
-                        onClick={() => onStageHunk(line.hunkIndex!)}
-                        className="rounded px-1 py-0.5 text-xs text-green-400 hover:bg-green-900/30"
-                        title="Stage this hunk"
-                      >
-                        +
-                      </button>
+                      <Tooltip content="Stage this hunk">
+                        <button
+                          onClick={() => onStageHunk(line.hunkIndex!)}
+                          className="rounded px-1 py-0.5 text-xs text-green-400 hover:bg-green-900/30"
+                          aria-label="Stage this hunk"
+                        >
+                          +
+                        </button>
+                      </Tooltip>
                     )}
                 </td>
 
