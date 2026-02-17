@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::{DaemonStatus, DiffSummary, GitLogEntry, GitStatus, Message, Milestone, Session, SessionId};
+use crate::types::{BranchInfo, DaemonStatus, DiffSummary, GitLogEntry, GitStatus, Message, Milestone, Session, SessionId};
 
 /// Requests that can be sent to the daemon.
 #[derive(Debug, Serialize, Deserialize)]
@@ -66,6 +66,10 @@ pub enum DaemonResponse {
     GitLogResult { entries: Vec<GitLogEntry> },
     /// Git commit succeeded.
     GitCommitResult { oid: String },
+    /// Branch info (name + remote existence).
+    GitBranchInfo { info: BranchInfo },
+    /// Git push succeeded.
+    GitPushResult,
 
     // Chat mode responses
     /// Full conversation history.

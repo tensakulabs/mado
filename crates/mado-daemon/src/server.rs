@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -26,6 +27,27 @@ use crate::process::new_shared_process_manager;
 use crate::session::{SessionManager, SharedSessionManager};
 use crate::state::DaemonState;
 
+/// Per-workspace mutex to serialize git operations.
+/// Prevents index.lock conflicts when multiple panes share a working directory.
+#[derive(Clone, Default)]
+pub struct WorkspaceLocks {
+    inner: Arc<Mutex<HashMap<PathBuf, Arc<Mutex<()>>>>>,
+}
+
+impl WorkspaceLocks {
+    /// Acquire a lock for the given workspace path.
+    /// Returns an owned guard — drop it when the git operation is done.
+    pub async fn acquire(&self, path: &Path) -> tokio::sync::OwnedMutexGuard<()> {
+        let mutex = {
+            let mut map = self.inner.lock().await;
+            map.entry(path.to_path_buf())
+                .or_insert_with(|| Arc::new(Mutex::new(())))
+                .clone()
+        };
+        mutex.lock_owned().await
+    }
+}
+
 /// Shared state for the axum server.
 #[derive(Clone)]
 pub struct AppState {
@@ -33,6 +55,7 @@ pub struct AppState {
     pub pid: u32,
     pub session_manager: SharedSessionManager,
     pub conversation_manager: SharedConversationManager,
+    pub workspace_locks: WorkspaceLocks,
 }
 
 /// Request body for creating a session.
@@ -187,6 +210,7 @@ fn create_app_state(daemon_state: Arc<Mutex<DaemonState>>, state_path: PathBuf) 
         pid: std::process::id(),
         session_manager,
         conversation_manager,
+        workspace_locks: WorkspaceLocks::default(),
     }
 }
 
@@ -223,6 +247,8 @@ fn create_router(state: AppState) -> Router {
         .route("/sessions/{id}/git/stage-files", post(git_stage_files_handler))
         .route("/sessions/{id}/git/unstage-files", post(git_unstage_files_handler))
         .route("/sessions/{id}/git/stage-hunk", post(git_stage_hunk_handler))
+        .route("/sessions/{id}/git/branch-info", get(git_branch_info_handler))
+        .route("/sessions/{id}/git/push", post(git_push_handler))
         .with_state(state)
 }
 
@@ -548,24 +574,13 @@ async fn save_milestone_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    // Get session's working directory.
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     // Ensure git repo exists.
     if let Err(e) = crate::git_ops::init_repo(path) {
@@ -605,23 +620,13 @@ async fn list_milestones_handler(
         .and_then(|l| l.parse().ok())
         .unwrap_or(20usize);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     match crate::git_ops::list_milestones(path, limit) {
         Ok(milestones) => {
@@ -670,23 +675,13 @@ async fn diff_milestones_handler(
         }
     };
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     match crate::git_ops::diff_milestones(path, &from_oid, &to_oid) {
         Ok(diff) => {
@@ -719,23 +714,13 @@ async fn restore_milestone_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     match crate::git_ops::restore_milestone(path, &body.oid) {
         Ok(()) => Json(DaemonResponse::Pong),
@@ -753,23 +738,13 @@ async fn workspace_changes_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     // Ensure git repo exists before querying changes.
     if let Err(e) = crate::git_ops::init_repo(path) {
@@ -810,23 +785,13 @@ async fn git_status_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     // Ensure git repo exists.
     if let Err(e) = crate::git_ops::init_repo(path) {
@@ -876,23 +841,13 @@ async fn git_file_diff_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
     let is_staged = params.staged.unwrap_or(false);
 
     match crate::git_ops::git_file_diff(path, &params.file_path, is_staged) {
@@ -910,23 +865,13 @@ async fn git_stage_file_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     // Ensure git repo exists.
     if let Err(e) = crate::git_ops::init_repo(path) {
@@ -950,23 +895,13 @@ async fn git_unstage_file_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     match crate::git_ops::git_unstage_file(path, &body.file_path) {
         Ok(()) => Json(DaemonResponse::Pong),
@@ -983,23 +918,13 @@ async fn git_stage_files_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     // Ensure git repo exists.
     if let Err(e) = crate::git_ops::init_repo(path) {
@@ -1023,23 +948,13 @@ async fn git_unstage_files_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     match crate::git_ops::git_unstage_files(path, &body.file_paths) {
         Ok(()) => Json(DaemonResponse::Pong),
@@ -1056,23 +971,13 @@ async fn git_stage_hunk_handler(
 ) -> Json<DaemonResponse> {
     let session_id = mado_core::types::SessionId::new(id);
 
-    let session = state.session_manager.get_session(&session_id).await;
-    let working_dir = match session {
-        Some(s) => s
-            .working_dir
-            .unwrap_or_else(|| {
-                dirs::home_dir()
-                    .map(|h| h.to_string_lossy().to_string())
-                    .unwrap_or_else(|| "/tmp".to_string())
-            }),
-        None => {
-            return Json(DaemonResponse::Error {
-                message: format!("Session not found: {}", session_id),
-            });
-        }
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
     };
 
     let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
 
     // Ensure git repo exists.
     if let Err(e) = crate::git_ops::init_repo(path) {
@@ -1086,6 +991,81 @@ async fn git_stage_hunk_handler(
         Err(e) => Json(DaemonResponse::Error {
             message: e.to_string(),
         }),
+    }
+}
+
+// ── Git branch & push endpoints ──
+
+async fn git_branch_info_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Json<DaemonResponse> {
+    let session_id = mado_core::types::SessionId::new(id);
+
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
+    };
+
+    let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
+
+    if let Err(e) = crate::git_ops::init_repo(path) {
+        return Json(DaemonResponse::Error {
+            message: format!("Failed to init git repo: {}", e),
+        });
+    }
+
+    match crate::git_ops::git_branch_info(path) {
+        Ok(info) => Json(DaemonResponse::GitBranchInfo {
+            info: mado_core::types::BranchInfo {
+                branch: info.branch,
+                has_remote: info.has_remote,
+            },
+        }),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+async fn git_push_handler(
+    State(state): State<AppState>,
+    AxumPath(id): AxumPath<String>,
+) -> Json<DaemonResponse> {
+    let session_id = mado_core::types::SessionId::new(id);
+
+    let working_dir = match resolve_working_dir(&state, &session_id).await {
+        Ok(wd) => wd,
+        Err(resp) => return resp,
+    };
+
+    let path = std::path::Path::new(&working_dir);
+    let _lock = state.workspace_locks.acquire(path).await;
+
+    match crate::git_ops::git_push(path) {
+        Ok(()) => Json(DaemonResponse::GitPushResult),
+        Err(e) => Json(DaemonResponse::Error {
+            message: e.to_string(),
+        }),
+    }
+}
+
+/// Resolve the working directory for a session, returning an error response if not found.
+async fn resolve_working_dir(
+    state: &AppState,
+    session_id: &mado_core::types::SessionId,
+) -> Result<String, Json<DaemonResponse>> {
+    let session = state.session_manager.get_session(session_id).await;
+    match session {
+        Some(s) => Ok(s.working_dir.unwrap_or_else(|| {
+            dirs::home_dir()
+                .map(|h| h.to_string_lossy().to_string())
+                .unwrap_or_else(|| "/tmp".to_string())
+        })),
+        None => Err(Json(DaemonResponse::Error {
+            message: format!("Session not found: {}", session_id),
+        })),
     }
 }
 

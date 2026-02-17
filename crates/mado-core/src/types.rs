@@ -56,7 +56,7 @@ pub struct Session {
     /// Current conversation state (chat mode).
     #[serde(default)]
     pub conversation_state: ConversationState,
-    /// Claude CLI session ID for --resume (not Kobo's session ID).
+    /// Claude CLI session ID for --resume (not Mado's session ID).
     #[serde(default)]
     pub claude_session_id: Option<String>,
     /// Number of messages in the conversation.
@@ -112,6 +112,15 @@ pub struct FileDiff {
 pub struct GitStatus {
     pub staged: Vec<FileDiff>,
     pub unstaged: Vec<FileDiff>,
+}
+
+/// Current branch and remote information.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BranchInfo {
+    /// Current branch name (e.g. "main").
+    pub branch: String,
+    /// Whether an "origin" remote is configured.
+    pub has_remote: bool,
 }
 
 /// A single entry in the git commit log.

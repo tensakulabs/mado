@@ -756,7 +756,51 @@ pub fn git_stage_hunk(path: &Path, file_path: &str, hunk_index: usize) -> Result
     Ok(())
 }
 
+/// Information about the current branch and remote.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BranchInfo {
+    /// Current branch name (e.g. "main").
+    pub branch: String,
+    /// Whether an "origin" remote is configured.
+    pub has_remote: bool,
+}
+
+/// Get the current branch name and whether an origin remote exists.
+pub fn git_branch_info(path: &Path) -> Result<BranchInfo, GitError> {
+    let repo = Repository::open(path)?;
+
+    let branch = match repo.head() {
+        Ok(head) => head
+            .shorthand()
+            .unwrap_or("HEAD")
+            .to_string(),
+        Err(_) => "HEAD".to_string(),
+    };
+
+    let has_remote = repo.find_remote("origin").is_ok();
+
+    Ok(BranchInfo { branch, has_remote })
+}
+
+/// Push the current branch to the origin remote.
+/// Uses the system `git` CLI to inherit the user's credential chain (SSH keys, credential helpers).
+pub fn git_push(path: &Path) -> Result<(), GitError> {
+    let output = std::process::Command::new("git")
+        .args(["push"])
+        .current_dir(path)
+        .output()
+        .map_err(|e| GitError::PathError(format!("Failed to run git push: {}", e)))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(GitError::PathError(format!("git push failed: {}", stderr.trim())));
+    }
+
+    tracing::info!("Pushed to origin from {}", path.display());
+    Ok(())
+}
+
 /// Create a git signature for commits.
 fn make_signature<'a>() -> Result<Signature<'a>, git2::Error> {
-    Signature::now("Kobo", "kobo@local")
+    Signature::now("Mado", "mado@local")
 }

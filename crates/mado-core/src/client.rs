@@ -44,7 +44,7 @@ pub enum ClientError {
     StartTimeout,
 }
 
-/// Client for communicating with the kobo daemon over a Unix domain socket.
+/// Client for communicating with the mado daemon over a Unix domain socket.
 #[derive(Debug, Clone)]
 pub struct DaemonClient {
     socket_path: PathBuf,
@@ -540,6 +540,41 @@ impl DaemonClient {
         let response: DaemonResponse = serde_json::from_slice(&body)?;
         match response {
             DaemonResponse::GitLogResult { entries } => Ok(entries),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Get branch info (name + remote existence).
+    pub async fn git_branch_info(
+        &self,
+        session_id: &str,
+    ) -> Result<crate::types::BranchInfo, ClientError> {
+        let body = self
+            .get(&format!("/sessions/{}/git/branch-info", session_id))
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::GitBranchInfo { info } => Ok(info),
+            DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
+            _ => Err(ClientError::UnexpectedResponse),
+        }
+    }
+
+    /// Push current branch to origin.
+    pub async fn git_push(
+        &self,
+        session_id: &str,
+    ) -> Result<(), ClientError> {
+        let body = self
+            .post(
+                &format!("/sessions/{}/git/push", session_id),
+                &serde_json::json!({}),
+            )
+            .await?;
+        let response: DaemonResponse = serde_json::from_slice(&body)?;
+        match response {
+            DaemonResponse::GitPushResult => Ok(()),
             DaemonResponse::Error { message } => Err(ClientError::DaemonError(message)),
             _ => Err(ClientError::UnexpectedResponse),
         }
