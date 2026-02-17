@@ -1,22 +1,28 @@
 import { create } from "zustand";
 import {
   type Session,
+  type CliSessionInfo,
   listSessions,
+  listCliSessions as ipcListCliSessions,
   createSession as ipcCreateSession,
   destroySession as ipcDestroySession,
 } from "../lib/ipc";
 
 interface SessionState {
   sessions: Session[];
+  cliSessions: CliSessionInfo[];
   isLoading: boolean;
   error: string | null;
   defaultModel: string;
   // Per-session model overrides (sessionId -> model).
   modelOverrides: Map<string, string>;
+  // Sessions where the user explicitly chose a workspace folder.
+  explicitWorkspaces: Set<string>;
 }
 
 interface SessionActions {
   fetchSessions: () => Promise<void>;
+  fetchCliSessions: (workingDir: string) => Promise<void>;
   createSession: (
     name: string,
     model: string,
@@ -33,15 +39,19 @@ interface SessionActions {
   setSessionModel: (sessionId: string, model: string) => void;
   // Update session's working directory.
   updateWorkingDir: (sessionId: string, workingDir: string) => Promise<void>;
+  // Check if user explicitly chose a workspace for this session.
+  hasExplicitWorkspace: (sessionId: string) => boolean;
 }
 
 export const useSessionStore = create<SessionState & SessionActions>()(
   (set, get) => ({
     sessions: [],
+    cliSessions: [],
     isLoading: false,
     error: null,
     defaultModel: "sonnet",
     modelOverrides: new Map(),
+    explicitWorkspaces: new Set(),
 
     fetchSessions: async () => {
       set({ isLoading: true, error: null });
@@ -50,6 +60,15 @@ export const useSessionStore = create<SessionState & SessionActions>()(
         set({ sessions, isLoading: false });
       } catch (err) {
         set({ error: String(err), isLoading: false });
+      }
+    },
+
+    fetchCliSessions: async (workingDir: string) => {
+      try {
+        const cliSessions = await ipcListCliSessions(workingDir, 50);
+        set({ cliSessions });
+      } catch (err) {
+        console.warn("Failed to fetch CLI sessions:", err);
       }
     },
 
@@ -72,9 +91,16 @@ export const useSessionStore = create<SessionState & SessionActions>()(
       }
 
       const session = await ipcCreateSession(dedupedName, model, rows, cols, cwd);
-      set((state) => ({
-        sessions: [...state.sessions, session],
-      }));
+      set((state) => {
+        const explicitWorkspaces = new Set(state.explicitWorkspaces);
+        if (cwd) {
+          explicitWorkspaces.add(session.id);
+        }
+        return {
+          sessions: [...state.sessions, session],
+          explicitWorkspaces,
+        };
+      });
       return session;
     },
 
@@ -120,6 +146,10 @@ export const useSessionStore = create<SessionState & SessionActions>()(
           s.id === sessionId ? { ...s, working_dir: workingDir } : s,
         ),
       }));
+    },
+
+    hasExplicitWorkspace: (sessionId: string) => {
+      return get().explicitWorkspaces.has(sessionId);
     },
   }),
 );

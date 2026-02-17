@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 
-const STORAGE_KEY = "mado-sidebar-width";
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
 const DEFAULT_WIDTH = 224; // matches Tailwind w-56 (14rem)
@@ -9,9 +8,9 @@ function clampWidth(w: number): number {
   return Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, w));
 }
 
-function loadPersistedWidth(): number {
+function loadPersistedWidth(storageKey: string): number {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(storageKey);
     if (stored) {
       const parsed = Number(stored);
       if (Number.isFinite(parsed)) return clampWidth(parsed);
@@ -22,16 +21,26 @@ function loadPersistedWidth(): number {
   return DEFAULT_WIDTH;
 }
 
+interface ResizableSidebarOptions {
+  /** localStorage key for persisting width. */
+  storageKey?: string;
+  /** Which side the panel is on — affects drag direction. */
+  side?: "left" | "right";
+}
+
 /**
- * Hook that provides drag-to-resize behaviour for the sidebar.
+ * Hook that provides drag-to-resize behaviour for a sidebar panel.
  *
  * Returns:
  *  - `width`           current sidebar width in px
  *  - `handleMouseDown` attach to the resize handle's onMouseDown
  *  - `isResizing`      true while the user is actively dragging
  */
-export function useResizableSidebar() {
-  const [width, setWidth] = useState(loadPersistedWidth);
+export function useResizableSidebar(options?: ResizableSidebarOptions) {
+  const storageKey = options?.storageKey ?? "mado-sidebar-width";
+  const side = options?.side ?? "left";
+
+  const [width, setWidth] = useState(() => loadPersistedWidth(storageKey));
   const [isResizing, setIsResizing] = useState(false);
 
   // Track start position so we can compute deltas.
@@ -53,7 +62,12 @@ export function useResizableSidebar() {
 
     const handleMouseMove = (e: MouseEvent) => {
       const delta = e.clientX - startXRef.current;
-      const newWidth = clampWidth(startWidthRef.current + delta);
+      // For right-side panels, dragging left (negative delta) should increase width.
+      const newWidth = clampWidth(
+        side === "right"
+          ? startWidthRef.current - delta
+          : startWidthRef.current + delta,
+      );
       setWidth(newWidth);
     };
 
@@ -61,7 +75,7 @@ export function useResizableSidebar() {
       setIsResizing(false);
       // Persist final width.
       try {
-        localStorage.setItem(STORAGE_KEY, String(width));
+        localStorage.setItem(storageKey, String(width));
       } catch {
         // Ignore persistence failures.
       }
@@ -74,17 +88,17 @@ export function useResizableSidebar() {
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing, width]);
+  }, [isResizing, width, side, storageKey]);
 
   // Persist on every width change (debounced via effect).
   useEffect(() => {
     if (isResizing) return; // Will persist on mouseUp.
     try {
-      localStorage.setItem(STORAGE_KEY, String(width));
+      localStorage.setItem(storageKey, String(width));
     } catch {
       // Ignore.
     }
-  }, [width, isResizing]);
+  }, [width, isResizing, storageKey]);
 
   return { width, handleMouseDown, isResizing } as const;
 }

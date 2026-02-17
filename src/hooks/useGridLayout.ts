@@ -5,7 +5,7 @@ const STORAGE_KEY = "mado-grid-layout";
 
 export interface GridPreset {
   label: string;
-  /** Ratios as percentages that sum to 100. For a 2-pane split, [70, 30] means 70/30. */
+  /** Ratios as percentages that sum to 100. For a 2-column split, [70, 30] means 70/30. */
   percentages: number[];
 }
 
@@ -40,8 +40,8 @@ function saveLayout(layout: StoredLayout): void {
 }
 
 export function useGridLayout() {
-  const root = usePaneStore((s) => s.root);
-  const resizePane = usePaneStore((s) => s.resizePane);
+  const columns = usePaneStore((s) => s.columns);
+  const resizeColumns = usePaneStore((s) => s.resizeColumns);
 
   const stored = loadStoredLayout();
   const [activePreset, setActivePreset] = useState<string | null>(
@@ -51,32 +51,32 @@ export function useGridLayout() {
     stored?.percentages ?? [50, 50],
   );
 
-  // Sync from store: when root changes externally (drag resize), update local state.
+  // Sync from store: when columns change externally (drag resize), update local state.
   useEffect(() => {
-    if (root?.type === "split") {
-      const first = Math.round(root.ratio * 100);
-      const second = 100 - first;
+    if (columns.length === 2) {
+      const first = Math.round(columns[0].width);
+      const second = Math.round(columns[1].width);
       setPercentages([first, second]);
 
-      // Check if current ratio matches a preset.
       const matchingPreset = GRID_PRESETS.find(
         (p) => p.percentages[0] === first && p.percentages[1] === second,
       );
       setActivePreset(matchingPreset?.label ?? null);
     }
-  }, [root]);
+  }, [columns]);
 
   const applyPercentages = useCallback(
     (newPercentages: number[], presetLabel: string | null) => {
-      if (!root || root.type !== "split") return;
+      if (columns.length < 2) return;
 
-      const ratio = newPercentages[0] / 100;
-      resizePane(root.id, ratio);
+      // For a 2-column layout, set the ratio between columns 0 and 1.
+      const ratio = newPercentages[0] / (newPercentages[0] + newPercentages[1]);
+      resizeColumns(0, ratio);
       setPercentages(newPercentages);
       setActivePreset(presetLabel);
       saveLayout({ percentages: newPercentages, presetLabel });
     },
-    [root, resizePane],
+    [columns, resizeColumns],
   );
 
   const resetToEven = useCallback(() => {
@@ -85,7 +85,6 @@ export function useGridLayout() {
 
   const setCustomSplit = useCallback(
     (newPercentages: number[]) => {
-      // Check if this matches any preset.
       const matchingPreset = GRID_PRESETS.find(
         (p) =>
           p.percentages[0] === newPercentages[0] &&
@@ -103,7 +102,7 @@ export function useGridLayout() {
     [applyPercentages],
   );
 
-  const hasSplit = root?.type === "split";
+  const hasSplit = columns.length >= 2;
 
   return {
     percentages,

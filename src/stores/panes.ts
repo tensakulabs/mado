@@ -4,61 +4,45 @@ import { create } from "zustand";
 
 export type SplitDirection = "horizontal" | "vertical";
 
-export interface LeafNode {
-  type: "leaf";
+export interface PaneCell {
   id: string;
-  sessionId?: string; // Optional - null when pane is in "welcome" state
+  sessionId?: string;
 }
 
-export interface SplitNode {
-  type: "split";
+export interface PaneColumn {
   id: string;
-  direction: SplitDirection;
-  children: [PaneNode, PaneNode];
-  ratio: number; // 0..1, position of the divider
+  width: number; // percentage (0-100), all columns sum to ~100
+  cells: PaneCell[];
+  cellHeights: number[]; // percentage per cell, same length as cells, sum to ~100
 }
-
-export type PaneNode = LeafNode | SplitNode;
 
 interface ClosedPane {
-  pane: LeafNode;
+  cell: PaneCell;
+  columnIndex: number;
+  cellIndex: number;
   closedAt: number;
-  parentId: string | null;
-  position: "first" | "second";
 }
 
 interface PaneState {
-  root: PaneNode | null;
+  columns: PaneColumn[];
   activePaneId: string | null;
   closedPanes: ClosedPane[];
 }
 
 interface PaneActions {
-  // Initialize with a single pane (sessionId optional for welcome state).
   initSinglePane: (sessionId?: string) => string;
-
-  // Split the active pane in a given direction.
   splitPane: (direction: SplitDirection, newSessionId: string) => string | null;
-
-  // Close a pane by ID (moves to undo buffer).
   closePane: (id: string) => void;
-
-  // Undo the most recent close.
   undoClose: () => ClosedPane | null;
-
-  // Focus a pane by ID.
   focusPane: (id: string) => void;
-
-  // Update the split ratio of a split node.
-  resizePane: (splitId: string, ratio: number) => void;
-
-  // Get all leaf panes.
-  getLeaves: () => LeafNode[];
-
-  // Navigate focus in a direction.
+  resizeColumns: (leftIndex: number, ratio: number) => void;
+  resizeCells: (colIndex: number, topIndex: number, ratio: number) => void;
+  setColumnWidth: (colIndex: number, newWidth: number) => void;
+  setCellHeight: (colIndex: number, cellIndex: number, newHeight: number) => void;
+  distributeEvenly: () => void;
+  setAllColumnWidths: (widths: number[]) => void;
+  getLeaves: () => PaneCell[];
   navigateFocus: (dir: "left" | "right" | "up" | "down") => void;
-
-  // Replace the session of a pane (keep pane, swap session).
   replaceSession: (paneId: string, newSessionId: string) => void;
 }
 
@@ -67,149 +51,139 @@ function generatePaneId(): string {
   return `pane-${nextPaneId++}`;
 }
 
-let nextSplitId = 1;
-function generateSplitId(): string {
-  return `split-${nextSplitId++}`;
+let nextColId = 1;
+function generateColId(): string {
+  return `col-${nextColId++}`;
 }
 
 // ── Helpers ──
 
-function findNodeById(node: PaneNode, id: string): PaneNode | null {
-  if (node.id === id) return node;
-  if (node.type === "split") {
-    return (
-      findNodeById(node.children[0], id) ??
-      findNodeById(node.children[1], id)
-    );
+function findCell(
+  columns: PaneColumn[],
+  cellId: string,
+): { colIndex: number; cellIndex: number } | null {
+  for (let ci = 0; ci < columns.length; ci++) {
+    for (let ri = 0; ri < columns[ci].cells.length; ri++) {
+      if (columns[ci].cells[ri].id === cellId) {
+        return { colIndex: ci, cellIndex: ri };
+      }
+    }
   }
   return null;
 }
 
-function findParent(
-  node: PaneNode,
-  targetId: string,
-): { parent: SplitNode; index: 0 | 1 } | null {
-  if (node.type === "split") {
-    if (node.children[0].id === targetId) return { parent: node, index: 0 };
-    if (node.children[1].id === targetId) return { parent: node, index: 1 };
-    return (
-      findParent(node.children[0], targetId) ??
-      findParent(node.children[1], targetId)
-    );
-  }
-  return null;
+function allCells(columns: PaneColumn[]): PaneCell[] {
+  return columns.flatMap((c) => c.cells);
 }
 
-function replaceNode(
-  root: PaneNode,
-  targetId: string,
-  replacement: PaneNode,
-): PaneNode {
-  if (root.id === targetId) return replacement;
-  if (root.type === "split") {
-    return {
-      ...root,
-      children: [
-        replaceNode(root.children[0], targetId, replacement),
-        replaceNode(root.children[1], targetId, replacement),
-      ],
-    };
-  }
-  return root;
-}
-
-function collectLeaves(node: PaneNode): LeafNode[] {
-  if (node.type === "leaf") return [node];
-  return [
-    ...collectLeaves(node.children[0]),
-    ...collectLeaves(node.children[1]),
-  ];
-}
-
-function getFirstLeaf(node: PaneNode): LeafNode {
-  if (node.type === "leaf") return node;
-  return getFirstLeaf(node.children[0]);
+function cloneColumns(columns: PaneColumn[]): PaneColumn[] {
+  return columns.map((c) => ({
+    ...c,
+    cells: [...c.cells],
+    cellHeights: [...c.cellHeights],
+  }));
 }
 
 // ── Store ──
 
 export const usePaneStore = create<PaneState & PaneActions>()((set, get) => ({
-  root: null,
+  columns: [],
   activePaneId: null,
   closedPanes: [],
 
   initSinglePane: (sessionId?: string) => {
     const id = generatePaneId();
     set({
-      root: { type: "leaf", id, sessionId },
+      columns: [
+        {
+          id: generateColId(),
+          width: 100,
+          cells: [{ id, sessionId }],
+          cellHeights: [100],
+        },
+      ],
       activePaneId: id,
     });
     return id;
   },
 
   splitPane: (direction: SplitDirection, newSessionId: string) => {
-    const { root, activePaneId } = get();
-    if (!root || !activePaneId) return null;
+    const { columns, activePaneId } = get();
+    if (columns.length === 0 || !activePaneId) return null;
 
-    const target = findNodeById(root, activePaneId);
-    if (!target || target.type !== "leaf") return null;
+    const pos = findCell(columns, activePaneId);
+    if (!pos) return null;
 
     const newPaneId = generatePaneId();
-    const newLeaf: LeafNode = {
-      type: "leaf",
-      id: newPaneId,
-      sessionId: newSessionId,
-    };
+    const newCell: PaneCell = { id: newPaneId, sessionId: newSessionId };
+    const newColumns = cloneColumns(columns);
 
-    const splitNode: SplitNode = {
-      type: "split",
-      id: generateSplitId(),
-      direction,
-      children: [target, newLeaf],
-      ratio: 0.5,
-    };
+    if (direction === "horizontal") {
+      // Add new column after current column, redistribute widths evenly.
+      newColumns.splice(pos.colIndex + 1, 0, {
+        id: generateColId(),
+        width: 0,
+        cells: [newCell],
+        cellHeights: [100],
+      });
+      const w = 100 / newColumns.length;
+      for (const col of newColumns) col.width = w;
+    } else {
+      // Add new cell below current cell in same column, redistribute heights evenly.
+      const col = newColumns[pos.colIndex];
+      col.cells.splice(pos.cellIndex + 1, 0, newCell);
+      const h = 100 / col.cells.length;
+      col.cellHeights = col.cells.map(() => h);
+    }
 
-    const newRoot = replaceNode(root, activePaneId, splitNode);
-    set({ root: newRoot, activePaneId: newPaneId });
+    set({ columns: newColumns, activePaneId: newPaneId });
     return newPaneId;
   },
 
   closePane: (id: string) => {
-    const { root, activePaneId, closedPanes } = get();
-    if (!root) return;
+    const { columns, activePaneId, closedPanes } = get();
+    const cells = allCells(columns);
+    if (cells.length <= 1) return; // Can't close the last pane.
 
-    // Can't close the last pane.
-    const leaves = collectLeaves(root);
-    if (leaves.length <= 1) return;
+    const pos = findCell(columns, id);
+    if (!pos) return;
 
-    const target = findNodeById(root, id);
-    if (!target || target.type !== "leaf") return;
+    const closedCell = columns[pos.colIndex].cells[pos.cellIndex];
+    const newColumns = cloneColumns(columns);
+    const targetCol = newColumns[pos.colIndex];
 
-    const parentResult = findParent(root, id);
-    if (!parentResult) return;
-
-    const { parent, index } = parentResult;
-    const sibling = parent.children[index === 0 ? 1 : 0];
-
-    // Replace the parent split with the sibling.
-    const newRoot = replaceNode(root, parent.id, sibling);
+    if (targetCol.cells.length === 1) {
+      // Remove entire column, redistribute widths.
+      newColumns.splice(pos.colIndex, 1);
+      const w = 100 / newColumns.length;
+      for (const c of newColumns) c.width = w;
+    } else {
+      // Remove cell from column, redistribute heights.
+      targetCol.cells.splice(pos.cellIndex, 1);
+      const h = 100 / targetCol.cells.length;
+      targetCol.cellHeights = targetCol.cells.map(() => h);
+    }
 
     // Determine new active pane.
-    const newActive =
-      activePaneId === id ? getFirstLeaf(sibling).id : activePaneId;
+    let newActiveId = activePaneId;
+    if (activePaneId === id) {
+      const adjColIdx = Math.min(pos.colIndex, newColumns.length - 1);
+      const adjCol = newColumns[adjColIdx];
+      const adjCellIdx = Math.min(pos.cellIndex, adjCol.cells.length - 1);
+      newActiveId = adjCol.cells[adjCellIdx].id;
+    }
 
-    // Add to undo buffer.
     const closedPane: ClosedPane = {
-      pane: target,
+      cell: closedCell,
+      columnIndex: pos.colIndex,
+      cellIndex: pos.cellIndex,
       closedAt: Date.now(),
-      parentId: parent.id,
-      position: index === 0 ? "first" : "second",
     };
 
     set({
-      root: newRoot,
-      activePaneId: newActive,
-      closedPanes: [closedPane, ...closedPanes].slice(0, 5), // Keep last 5
+      columns: newColumns,
+      activePaneId: newActiveId,
+      closedPanes: [closedPane, ...closedPanes].slice(0, 5),
     });
 
     // Auto-expire after 8 seconds.
@@ -221,33 +195,36 @@ export const usePaneStore = create<PaneState & PaneActions>()((set, get) => ({
   },
 
   undoClose: () => {
-    const { closedPanes } = get();
+    const { closedPanes, columns, activePaneId } = get();
     if (closedPanes.length === 0) return null;
 
     const [restored, ...remaining] = closedPanes;
+    const newColumns = cloneColumns(columns);
 
-    // Re-split the current active pane to bring back the closed pane.
-    const { root, activePaneId } = get();
-    if (!root || !activePaneId) return null;
+    // Add cell back to active pane's column (or create new column).
+    const activePos = activePaneId
+      ? findCell(newColumns, activePaneId)
+      : null;
 
-    const currentLeaf = findNodeById(root, activePaneId);
-    if (!currentLeaf) return null;
+    if (activePos) {
+      const col = newColumns[activePos.colIndex];
+      col.cells.splice(activePos.cellIndex + 1, 0, restored.cell);
+      const h = 100 / col.cells.length;
+      col.cellHeights = col.cells.map(() => h);
+    } else {
+      newColumns.push({
+        id: generateColId(),
+        width: 0,
+        cells: [restored.cell],
+        cellHeights: [100],
+      });
+      const w = 100 / newColumns.length;
+      for (const c of newColumns) c.width = w;
+    }
 
-    const splitNode: SplitNode = {
-      type: "split",
-      id: generateSplitId(),
-      direction: "horizontal",
-      children:
-        restored.position === "first"
-          ? [restored.pane, currentLeaf as LeafNode]
-          : [currentLeaf as LeafNode, restored.pane],
-      ratio: 0.5,
-    };
-
-    const newRoot = replaceNode(root, activePaneId, splitNode);
     set({
-      root: newRoot,
-      activePaneId: restored.pane.id,
+      columns: newColumns,
+      activePaneId: restored.cell.id,
       closedPanes: remaining,
     });
 
@@ -258,65 +235,164 @@ export const usePaneStore = create<PaneState & PaneActions>()((set, get) => ({
     set({ activePaneId: id });
   },
 
-  resizePane: (splitId: string, ratio: number) => {
-    const { root } = get();
-    if (!root) return;
+  resizeColumns: (leftIndex: number, ratio: number) => {
+    const { columns } = get();
+    if (leftIndex < 0 || leftIndex >= columns.length - 1) return;
 
-    const clamped = Math.max(0.1, Math.min(0.9, ratio));
+    const combined = columns[leftIndex].width + columns[leftIndex + 1].width;
+    const newLeft = Math.max(5, Math.min(combined - 5, combined * ratio));
+    const newRight = combined - newLeft;
 
-    function updateRatio(node: PaneNode): PaneNode {
-      if (node.id === splitId && node.type === "split") {
-        return { ...node, ratio: clamped };
-      }
-      if (node.type === "split") {
-        return {
-          ...node,
-          children: [
-            updateRatio(node.children[0]),
-            updateRatio(node.children[1]),
-          ],
-        };
-      }
-      return node;
-    }
+    const newColumns = columns.map((c, i) => {
+      if (i === leftIndex) return { ...c, width: newLeft };
+      if (i === leftIndex + 1) return { ...c, width: newRight };
+      return c;
+    });
 
-    set({ root: updateRatio(root) });
+    set({ columns: newColumns });
+  },
+
+  resizeCells: (colIndex: number, topIndex: number, ratio: number) => {
+    const { columns } = get();
+    if (colIndex < 0 || colIndex >= columns.length) return;
+    const col = columns[colIndex];
+    if (topIndex < 0 || topIndex >= col.cells.length - 1) return;
+
+    const combined = col.cellHeights[topIndex] + col.cellHeights[topIndex + 1];
+    const newTop = Math.max(5, Math.min(combined - 5, combined * ratio));
+    const newBottom = combined - newTop;
+
+    const newColumns = columns.map((c, ci) => {
+      if (ci !== colIndex) return c;
+      const newHeights = [...c.cellHeights];
+      newHeights[topIndex] = newTop;
+      newHeights[topIndex + 1] = newBottom;
+      return { ...c, cellHeights: newHeights };
+    });
+
+    set({ columns: newColumns });
+  },
+
+  setColumnWidth: (colIndex: number, newWidth: number) => {
+    const { columns } = get();
+    if (columns.length < 2 || colIndex < 0 || colIndex >= columns.length) return;
+
+    const clamped = Math.max(5, Math.min(95, newWidth));
+    const oldWidth = columns[colIndex].width;
+    const remaining = 100 - oldWidth; // what others currently share
+    const newRemaining = 100 - clamped;
+
+    const newColumns = columns.map((c, i) => {
+      if (i === colIndex) return { ...c, width: clamped };
+      // Redistribute proportionally among other columns.
+      const share = remaining > 0 ? c.width / remaining : 1 / (columns.length - 1);
+      return { ...c, width: Math.max(5, share * newRemaining) };
+    });
+
+    set({ columns: newColumns });
+  },
+
+  setCellHeight: (colIndex: number, cellIndex: number, newHeight: number) => {
+    const { columns } = get();
+    if (colIndex < 0 || colIndex >= columns.length) return;
+    const col = columns[colIndex];
+    if (col.cells.length < 2 || cellIndex < 0 || cellIndex >= col.cells.length) return;
+
+    const clamped = Math.max(5, Math.min(95, newHeight));
+    const oldHeight = col.cellHeights[cellIndex];
+    const remaining = 100 - oldHeight;
+    const newRemaining = 100 - clamped;
+
+    const newColumns = columns.map((c, ci) => {
+      if (ci !== colIndex) return c;
+      const newHeights = c.cellHeights.map((h, ri) => {
+        if (ri === cellIndex) return clamped;
+        const share = remaining > 0 ? h / remaining : 1 / (col.cells.length - 1);
+        return Math.max(5, share * newRemaining);
+      });
+      return { ...c, cellHeights: newHeights };
+    });
+
+    set({ columns: newColumns });
+  },
+
+  distributeEvenly: () => {
+    const { columns } = get();
+    if (columns.length === 0) return;
+
+    const evenWidth = 100 / columns.length;
+    const newColumns = columns.map((c) => {
+      const evenHeight = 100 / c.cells.length;
+      return {
+        ...c,
+        width: evenWidth,
+        cellHeights: c.cells.map(() => evenHeight),
+      };
+    });
+
+    set({ columns: newColumns });
+  },
+
+  setAllColumnWidths: (widths: number[]) => {
+    const { columns } = get();
+    if (widths.length !== columns.length) return;
+
+    const newColumns = columns.map((c, i) => ({
+      ...c,
+      width: widths[i],
+    }));
+
+    set({ columns: newColumns });
   },
 
   getLeaves: () => {
-    const { root } = get();
-    if (!root) return [];
-    return collectLeaves(root);
+    return allCells(get().columns);
   },
 
   navigateFocus: (dir: "left" | "right" | "up" | "down") => {
-    const { root, activePaneId } = get();
-    if (!root || !activePaneId) return;
+    const { columns, activePaneId } = get();
+    if (columns.length === 0 || !activePaneId) return;
 
-    const leaves = collectLeaves(root);
-    const currentIndex = leaves.findIndex((l) => l.id === activePaneId);
-    if (currentIndex === -1) return;
+    const pos = findCell(columns, activePaneId);
+    if (!pos) return;
 
-    // Simple linear navigation for now. Left/Up = previous, Right/Down = next.
-    let newIndex: number;
-    if (dir === "left" || dir === "up") {
-      newIndex = (currentIndex - 1 + leaves.length) % leaves.length;
-    } else {
-      newIndex = (currentIndex + 1) % leaves.length;
+    let newCol = pos.colIndex;
+    let newCell = pos.cellIndex;
+
+    switch (dir) {
+      case "left":
+        newCol = (newCol - 1 + columns.length) % columns.length;
+        newCell = Math.min(newCell, columns[newCol].cells.length - 1);
+        break;
+      case "right":
+        newCol = (newCol + 1) % columns.length;
+        newCell = Math.min(newCell, columns[newCol].cells.length - 1);
+        break;
+      case "up":
+        if (columns[newCol].cells.length > 1) {
+          newCell =
+            (newCell - 1 + columns[newCol].cells.length) %
+            columns[newCol].cells.length;
+        }
+        break;
+      case "down":
+        if (columns[newCol].cells.length > 1) {
+          newCell = (newCell + 1) % columns[newCol].cells.length;
+        }
+        break;
     }
 
-    set({ activePaneId: leaves[newIndex].id });
+    set({ activePaneId: columns[newCol].cells[newCell].id });
   },
 
   replaceSession: (paneId: string, newSessionId: string) => {
-    const { root } = get();
-    if (!root) return;
-
-    const target = findNodeById(root, paneId);
-    if (!target || target.type !== "leaf") return;
-
-    const newLeaf: LeafNode = { ...target, sessionId: newSessionId };
-    const newRoot = replaceNode(root, paneId, newLeaf);
-    set({ root: newRoot });
+    const { columns } = get();
+    const newColumns = columns.map((col) => ({
+      ...col,
+      cells: col.cells.map((cell) =>
+        cell.id === paneId ? { ...cell, sessionId: newSessionId } : cell,
+      ),
+    }));
+    set({ columns: newColumns });
   },
 }));
