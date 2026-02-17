@@ -3,6 +3,7 @@ import {
   GRID_PRESETS,
   useGridLayout,
 } from "../hooks/useGridLayout";
+import { Tooltip } from "./Tooltip";
 
 /**
  * A small popover popup for selecting grid layout presets or fine-tuning
@@ -78,19 +79,32 @@ export function GridResizePopup() {
 
   return (
     <div className="relative">
-      <button
-        ref={buttonRef}
-        onClick={() => setIsOpen((prev) => !prev)}
-        className="rounded px-2 py-0.5 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
-        title="Grid Layout Presets"
-      >
-        Grid
-      </button>
+      <Tooltip content="Grid Layout Presets">
+        <button
+          ref={buttonRef}
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="rounded p-1 text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
+          aria-label="Grid Layout Presets"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 16 16"
+            fill="currentColor"
+            className="h-3.5 w-3.5"
+          >
+            <path
+              fillRule="evenodd"
+              d="M1 2.75A.75.75 0 0 1 1.75 2h3.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75h-3.5A.75.75 0 0 1 1 6.25v-3.5Zm1.5.75v2h2v-2h-2ZM1 9.75A.75.75 0 0 1 1.75 9h3.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75h-3.5a.75.75 0 0 1-.75-.75v-3.5Zm1.5.75v2h2v-2h-2ZM8 2.75A.75.75 0 0 1 8.75 2h3.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75h-3.5A.75.75 0 0 1 8 6.25v-3.5Zm1.5.75v2h2v-2h-2ZM8 9.75A.75.75 0 0 1 8.75 9h3.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-.75.75h-3.5a.75.75 0 0 1-.75-.75v-3.5Zm1.5.75v2h2v-2h-2Z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      </Tooltip>
 
       {isOpen && (
         <div
           ref={popoverRef}
-          className="absolute left-1/2 top-full z-50 mt-1 w-56 -translate-x-1/2 rounded-md border border-theme-primary bg-theme-secondary p-3 shadow-lg"
+          className="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-theme-primary bg-theme-secondary p-3 shadow-lg"
         >
           {/* Header */}
           <p className="mb-2 text-xs font-medium text-theme-primary">

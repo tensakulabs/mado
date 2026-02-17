@@ -1,6 +1,8 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useLayoutEffect } from "react";
+import { createPortal } from "react-dom";
 import { type Milestone, type DiffSummary } from "../lib/ipc";
 import { useVersioning } from "../hooks/useVersioning";
+import { Tooltip } from "./Tooltip";
 
 interface TimelineProps {
   sessionId: string;
@@ -22,6 +24,7 @@ export function Timeline({ sessionId, onClose }: TimelineProps) {
     clearError,
   } = useVersioning();
 
+  const containerRef = useRef<HTMLDivElement>(null);
   const [selectedDiff, setSelectedDiff] = useState<{
     fromOid: string;
     toOid: string;
@@ -73,7 +76,7 @@ export function Timeline({ sessionId, onClose }: TimelineProps) {
   };
 
   return (
-    <div className="flex h-full flex-col bg-theme-secondary border-l border-theme-primary">
+    <div ref={containerRef} className="flex h-full flex-col bg-theme-secondary border-l border-theme-primary">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-theme-primary px-3 py-2">
         <h3 className="text-sm font-medium text-theme-secondary">Timeline</h3>
@@ -134,11 +137,12 @@ export function Timeline({ sessionId, onClose }: TimelineProps) {
         </div>
       </div>
 
-      {/* Diff panel */}
+      {/* Diff panel — portal-based, opens to the left */}
       {selectedDiff && (
         <DiffPanel
           diff={selectedDiff.diff}
           onClose={() => setSelectedDiff(null)}
+          anchorRef={containerRef}
         />
       )}
     </div>
@@ -178,9 +182,11 @@ function MilestoneEntry({
                 latest
               </span>
             )}
-            <span className="truncate text-sm text-theme-secondary">
-              {milestone.message}
-            </span>
+            <Tooltip content={milestone.message}>
+              <span className="truncate text-sm text-theme-secondary block max-w-[10rem]">
+                {milestone.message}
+              </span>
+            </Tooltip>
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-theme-muted">
             <span className="font-mono">{milestone.oid.slice(0, 7)}</span>
@@ -246,55 +252,94 @@ function MilestoneEntry({
 interface DiffPanelProps {
   diff: DiffSummary;
   onClose: () => void;
+  anchorRef: React.RefObject<HTMLDivElement | null>;
 }
 
-function DiffPanel({ diff, onClose }: DiffPanelProps) {
-  return (
-    <div className="flex max-h-[40%] flex-col border-t border-theme-primary">
-      {/* Sticky header */}
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-theme-secondary bg-theme-secondary px-3 py-2">
-        <div className="flex items-center gap-3 text-sm">
-          <span className="font-medium text-theme-secondary">Diff</span>
-          <span className="font-mono text-xs text-green-500">
-            +{diff.total_insertions}
-          </span>
-          <span className="font-mono text-xs text-red-500">
-            -{diff.total_deletions}
-          </span>
-        </div>
-        <button
-          onClick={onClose}
-          className="rounded px-2 py-1 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-secondary"
-        >
-          close
-        </button>
-      </div>
-      {/* Scrollable file list */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
-        {diff.files.map((file) => (
-          <div
-            key={file.path}
-            className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-theme-tertiary"
-          >
-            <span
-              className={`w-2 h-2 rounded-full ${
-                file.status === "added"
-                  ? "bg-green-500"
-                  : file.status === "deleted"
-                    ? "bg-red-500"
-                    : file.status === "renamed"
-                      ? "bg-blue-500"
-                      : "bg-yellow-500"
-              }`}
-            />
-            <span className="flex-1 truncate font-mono text-theme-muted">
-              {file.path}
+function DiffPanel({ diff, onClose, anchorRef }: DiffPanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<React.CSSProperties>({});
+
+  useLayoutEffect(() => {
+    if (!anchorRef.current || !panelRef.current) return;
+
+    const anchor = anchorRef.current.getBoundingClientRect();
+    const panel = panelRef.current.getBoundingClientRect();
+    const GAP = 4;
+    const MARGIN = 8;
+
+    // Position to the LEFT of the timeline
+    let left = anchor.left - panel.width - GAP;
+    // Align bottom of panel with bottom of timeline
+    let top = anchor.bottom - panel.height;
+
+    // Clamp to viewport
+    if (left < MARGIN) left = MARGIN;
+    if (top < MARGIN) top = MARGIN;
+    if (top + panel.height > window.innerHeight - MARGIN) {
+      top = window.innerHeight - panel.height - MARGIN;
+    }
+
+    setPos({ top, left, visibility: "visible" });
+  }, [anchorRef]);
+
+  return createPortal(
+    <>
+      {/* Backdrop to close on outside click */}
+      <div className="fixed inset-0 z-40" onClick={onClose} />
+      {/* Floating panel */}
+      <div
+        ref={panelRef}
+        className="fixed z-50 flex w-[400px] max-h-[50vh] flex-col rounded-lg border border-theme-primary bg-theme-secondary shadow-2xl"
+        style={{ visibility: "hidden", ...pos }}
+      >
+        {/* Header */}
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-theme-secondary px-3 py-2">
+          <div className="flex items-center gap-3 text-sm">
+            <span className="font-medium text-theme-secondary">Diff</span>
+            <span className="font-mono text-xs text-green-500">
+              +{diff.total_insertions}
             </span>
-            <span className="font-mono text-green-500">+{file.insertions}</span>
-            <span className="font-mono text-red-500">-{file.deletions}</span>
+            <span className="font-mono text-xs text-red-500">
+              -{diff.total_deletions}
+            </span>
           </div>
-        ))}
+          <button
+            onClick={onClose}
+            className="rounded px-2 py-1 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-secondary"
+          >
+            close
+          </button>
+        </div>
+        {/* Scrollable file list */}
+        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          {diff.files.map((file) => (
+            <div
+              key={file.path}
+              className="flex items-center gap-2 rounded px-2 py-1 text-xs hover:bg-theme-tertiary"
+            >
+              <span
+                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                  file.status === "added"
+                    ? "bg-green-500"
+                    : file.status === "deleted"
+                      ? "bg-red-500"
+                      : file.status === "renamed"
+                        ? "bg-blue-500"
+                        : "bg-yellow-500"
+                }`}
+              />
+              <Tooltip content={file.path}>
+                <span className="flex-1 truncate font-mono text-theme-muted block min-w-0">
+                  {file.path}
+                </span>
+              </Tooltip>
+              <span className="font-mono text-green-500 flex-shrink-0">+{file.insertions}</span>
+              <span className="font-mono text-red-500 flex-shrink-0">-{file.deletions}</span>
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
+    </>,
+    document.body,
   );
 }

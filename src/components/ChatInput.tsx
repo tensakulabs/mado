@@ -103,7 +103,7 @@ export function ChatInput({
                     const maxK = contextWindow / 1000;
                     return `${contextPercent.toFixed(0)}% (${usedK}K / ${maxK}K)`;
                   })()
-                : "--"}
+                : "0%"}
             </span>
           </div>
         )}

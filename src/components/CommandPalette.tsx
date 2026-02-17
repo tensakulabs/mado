@@ -33,7 +33,6 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
   const undoClose = usePaneStore((s) => s.undoClose);
   const activePaneId = usePaneStore((s) => s.activePaneId);
   const navigateFocus = usePaneStore((s) => s.navigateFocus);
-  const root = usePaneStore((s) => s.root);
   const initSinglePane = usePaneStore((s) => s.initSinglePane);
   const getLeaves = usePaneStore((s) => s.getLeaves);
 
@@ -210,7 +209,6 @@ export function CommandPalette({ isOpen, onClose, onOpenSettings }: CommandPalet
     getLeaves,
     initSinglePane,
     setDefaultModel,
-    root,
     onOpenSettings,
   ]);
 

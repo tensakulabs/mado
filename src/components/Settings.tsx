@@ -3,6 +3,7 @@ import {
   getConfig,
   updateConfig,
   deleteApiKey,
+  deleteAllData,
   setApiKey,
   checkCliAuth,
   checkCliInstalled,
@@ -10,6 +11,8 @@ import {
   type MadoConfig,
 } from "../lib/ipc";
 import { useUiStore, THEME_PRESETS } from "../stores/ui";
+import { ConfirmDialog } from "./ui/confirm-dialog";
+import { Tooltip } from "./Tooltip";
 
 interface SettingsProps {
   onBack: () => void;
@@ -87,12 +90,15 @@ const SECTIONS: { id: SettingsSection; label: string; icon: React.ReactNode }[] 
 /**
  * Full-page settings with sidebar navigation.
  */
-export function Settings({ onBack }: SettingsProps) {
+export function Settings({ onBack, onResetSetup }: SettingsProps) {
   const [activeSection, setActiveSection] = useState<SettingsSection>("account");
   const [config, setConfig] = useState<MadoConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Delete data confirmation
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
 
   // Change provider flow state
   const [changeStep, setChangeStep] = useState<ChangeStep>(null);
@@ -166,6 +172,17 @@ export function Settings({ onBack }: SettingsProps) {
   const setUserName = useUiStore((s) => s.setUserName);
   const setAiName = useUiStore((s) => s.setAiName);
 
+  // Handle delete all data
+  const handleDeleteAllData = useCallback(async () => {
+    setDeleteConfirmOpen(false);
+    try {
+      await deleteAllData();
+      onResetSetup();
+    } catch (err) {
+      setError(String(err));
+    }
+  }, [onResetSetup]);
+
   // Handle auth method dropdown change
   const handleAuthMethodDropdownChange = useCallback(async (method: "cli" | "api_key") => {
     if (!selectedProvider) return;
@@ -223,16 +240,17 @@ export function Settings({ onBack }: SettingsProps) {
       {/* Sidebar */}
       <div className="flex w-56 flex-col border-r border-theme-primary">
         {/* Header with back button */}
-        <button
-          onClick={onBack}
-          className="flex w-full items-center gap-2 border-b border-theme-primary px-4 py-3 text-theme-muted hover:bg-theme-tertiary hover:text-theme-secondary"
-          title="Back"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          <span className="text-sm font-medium">Settings</span>
-        </button>
+        <Tooltip content="Back">
+          <button
+            onClick={onBack}
+            className="flex w-full items-center gap-2 border-b border-theme-primary px-4 py-3 text-theme-muted hover:bg-theme-tertiary hover:text-theme-secondary"
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span className="text-sm font-medium">Settings</span>
+          </button>
+        </Tooltip>
 
         {/* Navigation */}
         <nav className="flex-1 p-2">
@@ -399,23 +417,25 @@ export function Settings({ onBack }: SettingsProps) {
                     className="w-32 rounded-lg border border-theme-primary bg-theme-secondary px-3 py-1.5 text-sm text-theme-primary focus:border-blue-500 focus:outline-none"
                     placeholder="You"
                   />
-                  <button
-                    onClick={async () => {
-                      const systemName = await getUserDisplayName().catch(() => "You");
-                      setUserName(systemName);
-                    }}
-                    className="p-1.5 text-theme-muted hover:text-theme-primary cursor-pointer"
-                    title="Reset to system name"
-                  >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                  </button>
+                  <Tooltip content="Reset to system name">
+                    <button
+                      onClick={async () => {
+                        const systemName = await getUserDisplayName().catch(() => "You");
+                        setUserName(systemName);
+                      }}
+                      className="p-1.5 text-theme-muted hover:text-theme-primary cursor-pointer"
+                      aria-label="Reset to system name"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                  </Tooltip>
                 </div>
               </div>
 
               {/* AI Name */}
-              <div className="flex items-center justify-between py-3">
+              <div className="flex items-center justify-between py-3 border-b border-theme-primary">
                 <div>
                   <div className="text-sm text-theme-primary">AI Name</div>
                   <div className="mt-0.5 text-xs text-theme-muted">Display name for assistant</div>
@@ -428,17 +448,47 @@ export function Settings({ onBack }: SettingsProps) {
                     className="w-32 rounded-lg border border-theme-primary bg-theme-secondary px-3 py-1.5 text-sm text-theme-primary focus:border-blue-500 focus:outline-none"
                     placeholder="AI"
                   />
+                  <Tooltip content="Reset to default">
+                    <button
+                      onClick={() => setAiName("AI")}
+                      className="p-1.5 text-theme-muted hover:text-theme-primary cursor-pointer"
+                      aria-label="Reset to default"
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                    </button>
+                  </Tooltip>
+                </div>
+              </div>
+
+              {/* Danger Zone */}
+              <div className="pt-2">
+                <div className="text-sm font-medium text-red-400 mb-3">Danger Zone</div>
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <div className="text-sm text-theme-primary">Delete All Data</div>
+                    <div className="mt-0.5 text-xs text-theme-muted">Remove config, conversations, and stored keys</div>
+                  </div>
                   <button
-                    onClick={() => setAiName("AI")}
-                    className="p-1.5 text-theme-muted hover:text-theme-primary cursor-pointer"
-                    title="Reset to default"
+                    onClick={() => setDeleteConfirmOpen(true)}
+                    className="rounded-lg border border-red-700/50 px-4 py-1.5 text-sm font-medium text-red-400 transition-colors hover:border-red-500 hover:bg-red-900/30"
                   >
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
+                    Delete Data
                   </button>
                 </div>
               </div>
+
+              <ConfirmDialog
+                open={deleteConfirmOpen}
+                title="Delete All Data"
+                description="This will permanently delete your Mado configuration, conversation history, and stored API keys. You'll need to set up Mado again. This cannot be undone."
+                confirmLabel="Delete Everything"
+                cancelLabel="Cancel"
+                variant="danger"
+                onConfirm={handleDeleteAllData}
+                onCancel={() => setDeleteConfirmOpen(false)}
+              />
             </div>
           )}
 
@@ -447,7 +497,7 @@ export function Settings({ onBack }: SettingsProps) {
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold text-theme-primary">Appearance</h2>
-                <p className="mt-1 text-sm text-theme-muted">Customize how Kobo looks</p>
+                <p className="mt-1 text-sm text-theme-muted">Customize how Mado looks</p>
               </div>
 
               {/* Theme */}
@@ -555,7 +605,7 @@ export function Settings({ onBack }: SettingsProps) {
           {activeSection === "about" && (
             <div className="space-y-6">
               <div>
-                <h2 className="text-lg font-semibold text-theme-primary">Kobo</h2>
+                <h2 className="text-lg font-semibold text-theme-primary">Mado</h2>
                 <p className="mt-1 text-sm text-theme-muted">Version 0.1.0</p>
               </div>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { type ModelInfo, listModels } from "../lib/ipc";
 import { useSessionStore } from "../stores/sessions";
+import { Tooltip } from "./Tooltip";
 
 /**
  * Dropdown model picker for the toolbar.
@@ -38,26 +39,27 @@ export function ModelPicker() {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
-        title="Select model"
-      >
-        <span className="font-medium">
-          {currentModel?.name ?? defaultModel}
-        </span>
-        <svg
-          className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
-          viewBox="0 0 20 20"
-          fill="currentColor"
+      <Tooltip content="Select model">
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="flex items-center gap-1 rounded px-2 py-0.5 text-xs text-theme-muted hover:bg-theme-tertiary hover:text-theme-primary"
         >
-          <path
-            fillRule="evenodd"
-            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
-            clipRule="evenodd"
-          />
-        </svg>
-      </button>
+          <span className="font-medium">
+            {currentModel?.name ?? defaultModel}
+          </span>
+          <svg
+            className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </button>
+      </Tooltip>
 
       {isOpen && (
         <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-lg border border-theme-primary bg-theme-tertiary py-1 shadow-xl">
