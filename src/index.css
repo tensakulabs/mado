@@ -22,6 +22,12 @@
   --zoom-level: 1;
 }
 
+html {
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -39,6 +45,18 @@ body {
   height: 100vh;
   /* Use CSS zoom for interface scaling (works in WebKit/Chromium) */
   zoom: var(--zoom-level);
+}
+
+/* Fix Tailwind preflight resetting cursor on interactive elements */
+button,
+[role="button"],
+a,
+select,
+summary,
+[type="button"],
+[type="submit"],
+[type="reset"] {
+  cursor: pointer;
 }
 
 /* Text selection styling */
